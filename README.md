@@ -29,28 +29,57 @@ Total lab time: **4–5 hours**.
 
 ## Quickstart
 
-```bash
-# Option A: conda
-conda activate ai-lab
+### 1. Setup Environment
+**Option A: Using venv (Recommended)**
+```powershell
+# Windows PowerShell
+python -m venv .venv
+.venv\Scripts\activate
 pip install -e ".[dev]"
 
-# Option B: venv
+# macOS / Linux
 python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
-
-# Start Redis for shared cache (requires Docker)
-make docker-up
-
-# Run tests — 25 will FAIL until you implement TODOs
-make test
-
-# Run chaos simulation (requires gateway + circuit breaker + cache implemented)
-make run-chaos
-
-# Generate report from metrics
-make report
 ```
+
+**Option B: Using Conda**
+```bash
+conda activate ai-lab
+pip install -e ".[dev]"
+```
+
+### 2. Start Distributed Cache (Redis)
+Requires Docker to be running:
+```bash
+# Start Redis container
+docker compose up -d
+# (Or using Makefile: make docker-up)
+```
+
+### 3. Run Validation and Simulation
+If you do not have `make` installed (especially on Windows), you can run the commands directly using `pytest` and `python`:
+
+*   **Run Test Suite:**
+    ```bash
+    pytest
+    # (Or using Makefile: make test)
+    ```
+*   **Run Chaos Simulation:**
+    ```bash
+    python scripts/run_chaos.py --config configs/default.yaml --out reports/metrics.json
+    # (Or using Makefile: make run-chaos)
+    ```
+*   **Generate Final Report:**
+    ```bash
+    python scripts/generate_report.py --metrics reports/metrics.json --out reports/final_report.md
+    # (Or using Makefile: make report)
+    ```
+
+### 4. Interactive Observatory Dashboard
+An interactive observability console and sandbox playground is provided in the repository root at [report.html](report.html):
+*   To view it, simply **double-click** [report.html](report.html) or open it directly in any modern web browser.
+*   No backend server or build steps are required. It operates entirely client-side.
 
 ## What you need to implement
 
