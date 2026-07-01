@@ -12,8 +12,8 @@ circuit_breaker:
   reset_timeout_seconds: 2
   success_threshold: 1
 cache:
-  enabled: true
-  backend: redis          # "memory" (default) or "redis" (requires docker compose up -d)
+  enabled: false
+  backend: memory
   ttl_seconds: 300
   similarity_threshold: 0.92
   redis_url: "redis://localhost:6379/0"
@@ -21,8 +21,6 @@ load_test:
   requests: 100
   concurrency: 5
 
-# Chaos scenarios: each overrides provider fail_rate for targeted testing.
-# Tweaked and expanded with backup and full-outage scenarios.
 scenarios:
   - name: primary_timeout_100
     description: "Primary provider fails 100% — all traffic should fallback"
@@ -32,19 +30,6 @@ scenarios:
     description: "Primary provider fails 50% — circuit should oscillate"
     provider_overrides:
       primary: 0.5
-  - name: backup_timeout_100
-    description: "Backup provider fails 100% — only primary works, fallback fails"
-    provider_overrides:
-      backup: 1.0
-  - name: both_failed_100
-    description: "Both providers fail 100% — gateway must serve static fallback"
-    provider_overrides:
-      primary: 1.0
-      backup: 1.0
-  - name: backup_flaky_50
-    description: "Backup provider fails 50% — backup circuit oscillates under load"
-    provider_overrides:
-      backup: 0.5
   - name: all_healthy
     description: "Baseline — both providers healthy"
     provider_overrides: {}

@@ -1,0 +1,3870 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SRE Observability Dashboard & Reliability Playground</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        :root {
+            --bg-main: #090b0f;
+            --bg-card: #12161f;
+            --bg-card-hover: #181d29;
+            --bg-header: #0d1017;
+            --border-color: #242c3d;
+            --border-hover: #37435c;
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --text-muted: #6b7280;
+            --color-primary: #f97316; /* SRE Orange */
+            --color-primary-glow: rgba(249, 115, 22, 0.15);
+            --color-success: #10b981;
+            --color-success-glow: rgba(16, 185, 129, 0.15);
+            --color-warning: #f59e0b;
+            --color-warning-glow: rgba(245, 158, 11, 0.15);
+            --color-danger: #ef4444;
+            --color-danger-glow: rgba(239, 68, 68, 0.15);
+            --color-info: #3b82f6;
+            --color-info-glow: rgba(59, 130, 246, 0.15);
+            --color-purple: #8b5cf6;
+            --font-main: 'Inter', sans-serif;
+            --font-mono: 'Fira Code', monospace;
+            --sidebar-width: 260px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-main);
+            background-color: var(--bg-main);
+            color: var(--text-primary);
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+        }
+
+        /* Scrollbars */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--bg-main);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--border-hover);
+        }
+
+        /* Layout */
+        #sidebar {
+            width: var(--sidebar-width);
+            background-color: var(--bg-header);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            z-index: 10;
+        }
+
+        .sidebar-logo {
+            padding: 24px;
+            font-weight: 700;
+            font-size: 1.1rem;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .sidebar-logo i {
+            color: var(--color-primary);
+            filter: drop-shadow(0 0 8px var(--color-primary));
+        }
+
+        .sidebar-menu {
+            list-style: none;
+            padding: 16px 8px;
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+
+        .sidebar-item {
+            margin-bottom: 4px;
+        }
+
+        .sidebar-link {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .sidebar-link:hover {
+            color: var(--text-primary);
+            background-color: var(--bg-card-hover);
+        }
+
+        .sidebar-link.active {
+            color: var(--text-primary);
+            background-color: var(--color-primary-glow);
+            border-left: 3px solid var(--color-primary);
+        }
+
+        .sidebar-footer {
+            padding: 16px;
+            border-top: 1px solid var(--border-color);
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-align: center;
+        }
+
+        #main-content {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        #topbar {
+            height: 64px;
+            background-color: var(--bg-header);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            flex-shrink: 0;
+        }
+
+        .topbar-title {
+            font-weight: 600;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .system-status {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .status-pill {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-color);
+            border-radius: 30px;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .status-dot.active {
+            background-color: var(--color-success);
+            box-shadow: 0 0 8px var(--color-success);
+            animation: pulse-green 1.5s infinite;
+        }
+
+        .status-dot.warning {
+            background-color: var(--color-warning);
+            box-shadow: 0 0 8px var(--color-warning);
+            animation: pulse-yellow 1.5s infinite;
+        }
+
+        .status-dot.danger {
+            background-color: var(--color-danger);
+            box-shadow: 0 0 8px var(--color-danger);
+            animation: pulse-red 1.5s infinite;
+        }
+
+        .tab-panel {
+            flex-grow: 1;
+            padding: 24px;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .tab-panel.active {
+            display: block;
+        }
+
+        /* Typography & Components */
+        h1, h2, h3, h4 {
+            color: var(--text-primary);
+            margin-bottom: 12px;
+            font-weight: 600;
+        }
+
+        p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.5;
+            margin-bottom: 16px;
+        }
+
+        .section-header {
+            margin-bottom: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 12px;
+        }
+
+        .section-title-wrap i {
+            color: var(--color-primary);
+            margin-right: 8px;
+        }
+
+        /* Buttons */
+        .sre-btn {
+            background-color: var(--border-color);
+            color: var(--text-primary);
+            border: 1px solid var(--border-hover);
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            transition: all 0.2s ease;
+        }
+
+        .sre-btn:hover {
+            background-color: var(--border-hover);
+            border-color: var(--text-muted);
+        }
+
+        .sre-btn-primary {
+            background-color: var(--color-primary);
+            border-color: var(--color-primary);
+        }
+
+        .sre-btn-primary:hover {
+            background-color: #ea580c;
+            border-color: #ea580c;
+            box-shadow: 0 0 10px rgba(249, 115, 22, 0.4);
+        }
+
+        .sre-btn-success {
+            background-color: var(--color-success);
+            border-color: var(--color-success);
+        }
+
+        .sre-btn-success:hover {
+            background-color: #059669;
+            border-color: #059669;
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+        }
+
+        .sre-btn-danger {
+            background-color: var(--color-danger);
+            border-color: var(--color-danger);
+        }
+
+        .sre-btn-danger:hover {
+            background-color: #dc2626;
+            border-color: #dc2626;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+        }
+
+        .sre-btn-sm {
+            padding: 4px 8px;
+            font-size: 0.75rem;
+            border-radius: 4px;
+        }
+
+        /* SRE Dashboard Cards */
+        .metrics-grid-10 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .metric-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.2s ease;
+        }
+
+        .metric-card:hover {
+            border-color: var(--border-hover);
+            background-color: var(--bg-card-hover);
+            transform: translateY(-2px);
+        }
+
+        .metric-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            margin-bottom: 8px;
+        }
+
+        .metric-card-header i {
+            color: var(--color-primary);
+        }
+
+        .metric-value {
+            font-size: 1.6rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+        }
+
+        .metric-change {
+            font-size: 0.75rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+        }
+
+        .metric-change.positive { color: var(--color-success); }
+        .metric-change.negative { color: var(--color-danger); }
+        .metric-change.neutral { color: var(--text-muted); }
+
+        .sparkline-container {
+            width: 100%;
+            height: 30px;
+            margin-top: 8px;
+        }
+
+        /* Layout Grid */
+        .sre-layout-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        @media (min-width: 1024px) {
+            .sre-layout-grid.two-cols {
+                grid-template-columns: 2fr 1fr;
+            }
+            .sre-layout-grid.equal-cols {
+                grid-template-columns: 1fr 1fr;
+            }
+            .sre-layout-grid.three-cols {
+                grid-template-columns: 1fr 1fr 1fr;
+            }
+        }
+
+        .dashboard-box {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .dashboard-box-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            padding-bottom: 10px;
+        }
+
+        /* Architecture Section */
+        #arch-container {
+            width: 100%;
+            height: 480px;
+            background: linear-gradient(180deg, #0e111a 0%, #080a0f 100%);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            padding: 20px;
+        }
+
+        .arch-col {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-around;
+            height: 100%;
+            z-index: 2;
+        }
+
+        .arch-node {
+            background-color: var(--bg-card);
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            padding: 14px 20px;
+            min-width: 140px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            position: relative;
+        }
+
+        .arch-node:hover {
+            border-color: var(--color-primary);
+            transform: scale(1.05);
+            box-shadow: 0 0 15px var(--color-primary-glow);
+        }
+
+        .arch-node.active-node {
+            border-color: var(--color-success);
+            box-shadow: 0 0 15px var(--color-success-glow);
+        }
+
+        .arch-node-title {
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin-bottom: 4px;
+        }
+
+        .arch-node-status {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+
+        .arch-meta-panel {
+            background: rgba(18, 22, 31, 0.85);
+            backdrop-filter: blur(10px);
+            border-left: 1px solid var(--border-color);
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 280px;
+            height: 100%;
+            padding: 20px;
+            transform: translateX(100%);
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            z-index: 5;
+            overflow-y: auto;
+        }
+
+        .arch-meta-panel.open {
+            transform: translateX(0);
+        }
+
+        .arch-svg-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .request-pulse {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 3;
+            transform: translate(-50%, -50%);
+        }
+
+        /* Circuit Breaker Visuals */
+        .cb-diagram-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 40px;
+            margin: 24px 0;
+            position: relative;
+        }
+
+        .cb-state-node {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            border: 3px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-weight: 600;
+            font-size: 0.85rem;
+            position: relative;
+            background-color: var(--bg-card);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+            transition: all 0.3s ease;
+        }
+
+        .cb-state-node.active-state {
+            transform: scale(1.15);
+        }
+
+        .cb-state-node.state-closed { border-color: var(--color-success); }
+        .cb-state-node.state-closed.active-state {
+            box-shadow: 0 0 25px rgba(16, 185, 129, 0.4);
+            background-color: rgba(16, 185, 129, 0.1);
+        }
+
+        .cb-state-node.state-open { border-color: var(--color-danger); }
+        .cb-state-node.state-open.active-state {
+            box-shadow: 0 0 25px rgba(239, 68, 68, 0.4);
+            background-color: rgba(239, 68, 68, 0.1);
+        }
+
+        .cb-state-node.state-half-open { border-color: var(--color-warning); }
+        .cb-state-node.state-half-open.active-state {
+            box-shadow: 0 0 25px rgba(245, 158, 11, 0.4);
+            background-color: rgba(245, 158, 11, 0.1);
+        }
+
+        .cb-arrow {
+            position: relative;
+            display: flex;
+            align-items: center;
+            color: var(--text-muted);
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        .cb-arrow.active {
+            color: var(--color-primary);
+            animation: text-pulse 1s infinite alternate;
+        }
+
+        .log-table-wrapper {
+            max-height: 250px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+        }
+
+        table.sre-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 0.85rem;
+        }
+
+        table.sre-table th {
+            background-color: rgba(255,255,255,0.02);
+            border-bottom: 1px solid var(--border-color);
+            padding: 10px 12px;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        table.sre-table td {
+            border-bottom: 1px solid var(--border-color);
+            padding: 8px 12px;
+            color: var(--text-primary);
+        }
+
+        table.sre-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* Controls Form */
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        @media (min-width: 640px) {
+            .form-row.two-cols {
+                grid-template-columns: 1fr 1fr;
+            }
+            .form-row.three-cols {
+                grid-template-columns: 1fr 1fr 1fr;
+            }
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-group label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .form-group input[type="text"],
+        .form-group input[type="number"],
+        .form-group select {
+            background-color: rgba(0,0,0,0.2);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-family: var(--font-main);
+            font-size: 0.85rem;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            border-color: var(--color-primary);
+            outline: none;
+        }
+
+        .form-group input[type="range"] {
+            -webkit-appearance: none;
+            background: var(--border-color);
+            height: 6px;
+            border-radius: 3px;
+            outline: none;
+            margin: 8px 0;
+        }
+
+        .form-group input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            background: var(--color-primary);
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 6px var(--color-primary);
+        }
+
+        /* Cache visualization list */
+        .cache-vis-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 350px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 10px;
+        }
+
+        .cache-vis-item {
+            background-color: rgba(255,255,255,0.01);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+        }
+
+        .cache-vis-key {
+            font-weight: 500;
+            color: var(--color-primary);
+            word-break: break-all;
+        }
+
+        .cache-vis-val {
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .cache-vis-ttl {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            background: rgba(255,255,255,0.04);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        /* Terminal Mock */
+        .terminal-container {
+            background-color: #06080d;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            padding: 12px;
+            color: #38bdf8;
+            height: 300px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
+        }
+
+        .terminal-output {
+            flex-grow: 1;
+            overflow-y: auto;
+            margin-bottom: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .terminal-line {
+            line-height: 1.4;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .terminal-prompt-line {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #10b981;
+        }
+
+        .terminal-input {
+            background: transparent;
+            border: none;
+            color: #f3f4f6;
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            flex-grow: 1;
+            outline: none;
+        }
+
+        /* Chaos Scenarios Grid */
+        .chaos-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 16px;
+        }
+
+        @media (min-width: 640px) {
+            .chaos-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (min-width: 1280px) {
+            .chaos-grid {
+                grid-template-columns: repeat(4, 1fr);
+            }
+        }
+
+        .chaos-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+            transition: all 0.2s ease;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chaos-card.active-chaos {
+            border-color: var(--color-danger);
+            background-color: var(--color-danger-glow);
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.2);
+        }
+
+        .chaos-card-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+            margin-bottom: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chaos-card-desc {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            flex-grow: 1;
+            margin-bottom: 12px;
+        }
+
+        .chaos-card-status {
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 4px;
+            text-transform: uppercase;
+        }
+
+        /* Replay Section */
+        .replay-controls {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .replay-timeline {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+            margin: 40px 0;
+            padding: 0 20px;
+        }
+
+        .replay-timeline::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 20px;
+            right: 20px;
+            height: 4px;
+            background-color: var(--border-color);
+            z-index: 1;
+            transform: translateY(-50%);
+        }
+
+        .replay-timeline-progress {
+            position: absolute;
+            top: 50%;
+            left: 20px;
+            height: 4px;
+            background-color: var(--color-primary);
+            z-index: 2;
+            transform: translateY(-50%);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .replay-step {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background-color: var(--bg-card);
+            border: 3px solid var(--border-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 3;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .replay-step.active {
+            border-color: var(--color-primary);
+            background-color: var(--color-primary-glow);
+            box-shadow: 0 0 15px var(--color-primary);
+            transform: scale(1.15);
+        }
+
+        .replay-step.completed {
+            border-color: var(--color-success);
+            background-color: var(--color-success-glow);
+        }
+
+        .replay-step-desc {
+            position: absolute;
+            top: 54px;
+            width: 120px;
+            text-align: center;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            left: 50%;
+            transform: translateX(-50%);
+            font-weight: 500;
+        }
+
+        .replay-step.active .replay-step-desc {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        /* Test suite results formatting */
+        .test-suite-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            background-color: rgba(255,255,255,0.02);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .test-suite-header:hover {
+            background-color: rgba(255,255,255,0.04);
+        }
+
+        .test-suite-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .test-suite-summary {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .test-list-body {
+            display: none;
+            padding: 10px 16px;
+            border-left: 2px solid var(--border-color);
+            margin-left: 10px;
+            margin-bottom: 12px;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .test-list-body.open {
+            display: flex;
+        }
+
+        .test-case-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.02);
+        }
+
+        .test-case-name {
+            font-family: var(--font-mono);
+            color: var(--text-primary);
+        }
+
+        .test-case-status {
+            font-weight: 600;
+            font-size: 0.75rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        /* Stretch Goals Visual */
+        .stretch-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 16px;
+        }
+
+        @media (min-width: 768px) {
+            .stretch-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (min-width: 1200px) {
+            .stretch-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        .stretch-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        .stretch-card:hover {
+            border-color: var(--color-primary);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(249, 115, 22, 0.1);
+        }
+
+        .stretch-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 10px;
+        }
+
+        .stretch-status {
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 4px;
+            text-transform: uppercase;
+        }
+
+        .stretch-status.implemented {
+            background-color: rgba(16, 185, 129, 0.15);
+            color: var(--color-success);
+            border: 1px solid var(--color-success);
+        }
+
+        .stretch-status.partial {
+            background-color: rgba(245, 158, 11, 0.15);
+            color: var(--color-warning);
+            border: 1px solid var(--color-warning);
+        }
+
+        .stretch-status.not-implemented {
+            background-color: rgba(239, 68, 68, 0.15);
+            color: var(--color-danger);
+            border: 1px solid var(--color-danger);
+        }
+
+        /* Toast Container */
+        #toast-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 100;
+            max-width: 360px;
+        }
+
+        .toast {
+            background: rgba(18, 22, 31, 0.95);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: 6px;
+            padding: 12px 16px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+            display: flex;
+            align-items: start;
+            gap: 12px;
+            transform: translateX(120%);
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .toast.show {
+            transform: translateX(0);
+        }
+
+        .toast-icon {
+            font-size: 1.1rem;
+        }
+
+        .toast.toast-success { border-left: 4px solid var(--color-success); }
+        .toast.toast-success .toast-icon { color: var(--color-success); }
+
+        .toast.toast-warning { border-left: 4px solid var(--color-warning); }
+        .toast.toast-warning .toast-icon { color: var(--color-warning); }
+
+        .toast.toast-error { border-left: 4px solid var(--color-danger); }
+        .toast.toast-error .toast-icon { color: var(--color-danger); }
+
+        .toast.toast-info { border-left: 4px solid var(--color-info); }
+        .toast.toast-info .toast-icon { color: var(--color-info); }
+
+        .toast-content {
+            flex-grow: 1;
+        }
+
+        .toast-title {
+            font-weight: 600;
+            font-size: 0.85rem;
+            margin-bottom: 2px;
+        }
+
+        .toast-desc {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .toast-close {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+
+        /* Animations */
+        @keyframes pulse-green {
+            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+        @keyframes pulse-yellow {
+            0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+            70% { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+        }
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        @keyframes text-pulse {
+            0% { opacity: 0.6; }
+            100% { opacity: 1; }
+        }
+
+        /* Progress Bar */
+        .progress-bar-container {
+            width: 100%;
+            height: 10px;
+            background-color: var(--border-color);
+            border-radius: 5px;
+            overflow: hidden;
+            margin-bottom: 12px;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background-color: var(--color-success);
+            width: 0%;
+            transition: width 0.1s linear;
+        }
+
+        /* Modals */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .modal-overlay.open {
+            display: flex;
+            opacity: 1;
+        }
+
+        .modal-box {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            width: 90%;
+            max-width: 600px;
+            padding: 24px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            transform: scale(0.9);
+            transition: transform 0.2s ease;
+            position: relative;
+        }
+
+        .modal-overlay.open .modal-box {
+            transform: scale(1);
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            cursor: pointer;
+        }
+
+        .modal-close:hover {
+            color: var(--text-primary);
+        }
+
+        /* Print formatting */
+        @media print {
+            body {
+                background: white;
+                color: black;
+                overflow: visible;
+                height: auto;
+            }
+            #sidebar, #topbar, .sre-btn, #toast-container, .modal-overlay, .tab-panel:not(.active) {
+                display: none !important;
+            }
+            #main-content {
+                overflow: visible;
+                height: auto;
+            }
+            .tab-panel.active {
+                display: block !important;
+                padding: 0;
+                overflow: visible;
+            }
+            .dashboard-box, .metric-card, #arch-container {
+                background: white !important;
+                color: black !important;
+                border: 1px solid #ccc !important;
+                box-shadow: none !important;
+                break-inside: avoid;
+            }
+            .metric-value, h1, h2, h3, h4, table td, table th {
+                color: black !important;
+            }
+            .sparkline-container {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- SIDEBAR -->
+    <div id="sidebar">
+        <div class="sidebar-logo">
+            <i class="fa-solid fa-gauge-high"></i>
+            <span>SRE Console 2.0</span>
+        </div>
+        <ul class="sidebar-menu">
+            <li class="sidebar-item">
+                <a href="#" class="sidebar-link active" data-tab="overview">
+                    <i class="fa-solid fa-chart-line"></i> Overview Summary
+                </a>
+            </li>
+            <li class="sidebar-item">
+                <a href="#" class="sidebar-link" data-tab="architecture">
+                    <i class="fa-solid fa-network-wired"></i> System Architecture
+                </a>
+            </li>
+            <li class="sidebar-item">
+                <a href="#" class="sidebar-link" data-tab="breaker">
+                    <i class="fa-solid fa-bolt"></i> Circuit Breaker
+                </a>
+            </li>
+            <li class="sidebar-item">
+                <a href="#" class="sidebar-link" data-tab="fallback">
+                    <i class="fa-solid fa-code-branch"></i> Provider Fallbacks
+                </a>
+            </li>
+            <li class="sidebar-item">
+                <a href="#" class="sidebar-link" data-tab="cache">
+                    <i class="fa-solid fa-memory"></i> Semantic Cache
+                </a>
+            </li>
+            <li class="sidebar-item">
+                <a href="#" class="sidebar-link" data-tab="privacy">
+                    <i class="fa-solid fa-shield-halved"></i> Privacy Guardrails
+                </a>
+            </li>
+            <li class="sidebar-item">
+                <a href="#" class="sidebar-link" data-tab="redis">
+                    <i class="fa-solid fa-database"></i> Redis Visualizer
+                </a>
+            </li>
+            <li class="sidebar-item">
+                <a href="#" class="sidebar-link" data-tab="chaos">
+                    <i class="fa-solid fa-circle-radiation"></i> Chaos Playground
+                </a>
+            </li>
+            <li class="sidebar-item">
+                <a href="#" class="sidebar-link" data-tab="loadtest">
+                    <i class="fa-solid fa-gauge-high"></i> Load Simulator
+                </a>
+            </li>
+            <li class="sidebar-item">
+                <a href="#" class="sidebar-link" data-tab="metrics">
+                    <i class="fa-solid fa-chart-bar"></i> Live Charts
+                </a>
+            </li>
+            <li class="sidebar-item">
+                <a href="#" class="sidebar-link" data-tab="cost">
+                    <i class="fa-solid fa-dollar-sign"></i> Cost Analysis
+                </a>
+            </li>
+
+        </ul>
+        <div class="sidebar-footer">
+            <span>Antigravity CLI v2.4.1</span>
+        </div>
+    </div>
+
+    <!-- MAIN WRAPPER -->
+    <div id="main-content">
+        <!-- TOPBAR -->
+        <div id="topbar">
+            <div class="topbar-title">
+                <span id="tab-title-text">Reliability Executive Summary</span>
+            </div>
+            <div class="system-status">
+                <div class="status-pill">
+                    Budget Used: <strong style="color: var(--text-primary); margin-left: 4px;" id="status-budget-val">$0.00</strong> / $10.00
+                </div>
+                <div class="status-pill">
+                    Cache status: 
+                    <span class="status-dot active" style="margin-left: 6px;"></span>
+                    <strong style="color: var(--text-primary); margin-left: 4px;">SYNCED</strong>
+                </div>
+                <div class="status-pill">
+                    SRE Console: 
+                    <span class="status-dot active" style="margin-left: 6px;"></span>
+                    <strong style="color: var(--text-primary); margin-left: 4px;">ONLINE</strong>
+                </div>
+            </div>
+        </div>
+
+        <!-- 1. OVERVIEW SUMMARY TAB -->
+        <div class="tab-panel active" id="tab-overview">
+            <div class="section-header">
+                <div class="section-title-wrap">
+                    <h2><i class="fa-solid fa-gauge-simple-high"></i> Executive Summary</h2>
+                    <p style="margin: 0; font-size: 0.85rem;">Reliability Engineering for Production LLM Agents Dashboard</p>
+                </div>
+                <div>
+                    <button class="sre-btn sre-btn-primary" onclick="exportMarkdownReport()"><i class="fa-solid fa-file-export"></i> Export Markdown Report</button>
+                    <button class="sre-btn" onclick="window.print()"><i class="fa-solid fa-print"></i> Print PDF</button>
+                </div>
+            </div>
+
+            <!-- HERO METRICS CARDS -->
+            <div class="metrics-grid-10">
+                <div class="metric-card" title="Percentage of requests successfully resolved with availability targets.">
+                    <div class="metric-card-header">
+                        <span>Availability (SLO)</span>
+                        <i class="fa-solid fa-circle-check" style="color: var(--color-success);"></i>
+                    </div>
+                    <div class="metric-value">
+                        <span id="metric-avail">99.85%</span>
+                    </div>
+                    <span class="metric-change positive"><i class="fa-solid fa-caret-up"></i> +0.15% vs target</span>
+                    <div class="sparkline-container"><canvas id="spark-avail"></canvas></div>
+                </div>
+
+                <div class="metric-card" title="Rate of errors reaching the client wrapper.">
+                    <div class="metric-card-header">
+                        <span>Error Rate</span>
+                        <i class="fa-solid fa-triangle-exclamation" style="color: var(--color-danger);"></i>
+                    </div>
+                    <div class="metric-value">
+                        <span id="metric-err">0.15%</span>
+                    </div>
+                    <span class="metric-change positive"><i class="fa-solid fa-caret-down"></i> -1.25% vs baseline</span>
+                    <div class="sparkline-container"><canvas id="spark-err"></canvas></div>
+                </div>
+
+                <div class="metric-card" title="P50 Latency.">
+                    <div class="metric-card-header">
+                        <span>P50 Latency</span>
+                        <i class="fa-solid fa-bolt" style="color: var(--color-warning);"></i>
+                    </div>
+                    <div class="metric-value">
+                        <span id="metric-p50">48ms</span>
+                    </div>
+                    <span class="metric-change positive"><i class="fa-solid fa-caret-down"></i> -2ms vs baseline</span>
+                    <div class="sparkline-container"><canvas id="spark-p50"></canvas></div>
+                </div>
+
+                <div class="metric-card" title="P95 Latency representing system delays.">
+                    <div class="metric-card-header">
+                        <span>P95 Latency</span>
+                        <i class="fa-solid fa-bolt" style="color: var(--color-warning);"></i>
+                    </div>
+                    <div class="metric-value">
+                        <span id="metric-p95">95ms</span>
+                    </div>
+                    <span class="metric-change positive"><i class="fa-solid fa-caret-down"></i> -15ms vs baseline</span>
+                    <div class="sparkline-container"><canvas id="spark-p95"></canvas></div>
+                </div>
+
+                <div class="metric-card" title="P99 Worst Case Latency.">
+                    <div class="metric-card-header">
+                        <span>P99 Latency</span>
+                        <i class="fa-solid fa-bolt-lightning" style="color: var(--color-danger);"></i>
+                    </div>
+                    <div class="metric-value">
+                        <span id="metric-p99">180ms</span>
+                    </div>
+                    <span class="metric-change positive"><i class="fa-solid fa-caret-down"></i> -40ms vs baseline</span>
+                    <div class="sparkline-container"><canvas id="spark-p99"></canvas></div>
+                </div>
+
+                <div class="metric-card" title="Ratio of Cache Hit relative to total resolved queries.">
+                    <div class="metric-card-header">
+                        <span>Cache Hit Rate</span>
+                        <i class="fa-solid fa-memory" style="color: var(--color-info);"></i>
+                    </div>
+                    <div class="metric-value">
+                        <span id="metric-cache-hit">74.2%</span>
+                    </div>
+                    <span class="metric-change positive"><i class="fa-solid fa-caret-up"></i> +4.5% vs target</span>
+                    <div class="sparkline-container"><canvas id="spark-cache"></canvas></div>
+                </div>
+
+                <div class="metric-card" title="Accuracy and success rate of fallbacks inside the gateway routing flow.">
+                    <div class="metric-card-header">
+                        <span>Fallback Success</span>
+                        <i class="fa-solid fa-shield-halved" style="color: var(--color-success);"></i>
+                    </div>
+                    <div class="metric-value">
+                        <span id="metric-fallback-succ">100%</span>
+                    </div>
+                    <span class="metric-change neutral">Stable</span>
+                    <div class="sparkline-container"><canvas id="spark-fallback"></canvas></div>
+                </div>
+
+                <div class="metric-card" title="Estimated API budget saved by avoiding redundant LLM provider requests.">
+                    <div class="metric-card-header">
+                        <span>Cost Saved</span>
+                        <i class="fa-solid fa-hand-holding-dollar" style="color: var(--color-success);"></i>
+                    </div>
+                    <div class="metric-value">
+                        <span id="metric-cost-saved">$42.85</span>
+                    </div>
+                    <span class="metric-change positive"><i class="fa-solid fa-caret-up"></i> 72.4% reduction</span>
+                    <div class="sparkline-container"><canvas id="spark-cost"></canvas></div>
+                </div>
+
+                <div class="metric-card" title="Time taken for circuit breaker to recover to CLOSED state.">
+                    <div class="metric-card-header">
+                        <span>Avg Recovery Time</span>
+                        <i class="fa-solid fa-clock" style="color: var(--color-info);"></i>
+                    </div>
+                    <div class="metric-value">
+                        <span id="metric-recovery">2.4s</span>
+                    </div>
+                    <span class="metric-change positive"><i class="fa-solid fa-caret-down"></i> -120ms improvement</span>
+                    <div class="sparkline-container"><canvas id="spark-recovery"></canvas></div>
+                </div>
+
+                <div class="metric-card" title="Number of times provider circuit breakers transitioned to OPEN state.">
+                    <div class="metric-card-header">
+                        <span>Circuit Opens</span>
+                        <i class="fa-solid fa-triangle-exclamation" style="color: var(--color-warning);"></i>
+                    </div>
+                    <div class="metric-value">
+                        <span id="metric-breaker-opens">4</span>
+                    </div>
+                    <span class="metric-change negative"><i class="fa-solid fa-caret-up"></i> +1 vs baseline</span>
+                    <div class="sparkline-container"><canvas id="spark-opens"></canvas></div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- 2. ARCHITECTURE DIAGRAM TAB -->
+        <div class="tab-panel" id="tab-architecture">
+            <div class="section-header">
+                <div class="section-title-wrap">
+                    <h2><i class="fa-solid fa-network-wired"></i> System Architecture Flow</h2>
+                    <p style="margin: 0; font-size: 0.85rem;">Interactive architecture mapping showing end-to-end request lifecycle</p>
+                </div>
+                <div>
+                    <button class="sre-btn sre-btn-success" onclick="simulateRequestFlow()"><i class="fa-solid fa-paper-plane"></i> Send Test Request Pulse</button>
+                </div>
+            </div>
+
+            <div style="position: relative; overflow: hidden; border-radius: 8px;">
+                <div id="arch-container">
+                    <svg class="arch-svg-overlay" id="arch-connections">
+                        <!-- Path lines will be drawn here dynamically -->
+                    </svg>
+
+                    <!-- Col 1: Input -->
+                    <div class="arch-col">
+                        <div class="arch-node" id="node-client" onclick="showNodeDetails('client')">
+                            <div class="arch-node-title"><i class="fa-solid fa-user"></i> Client User</div>
+                            <div class="arch-node-status"><span class="status-dot active"></span> Active</div>
+                        </div>
+                    </div>
+
+                    <!-- Col 2: Gateway & Cache -->
+                    <div class="arch-col">
+                        <div class="arch-node" id="node-gateway" onclick="showNodeDetails('gateway')">
+                            <div class="arch-node-title"><i class="fa-solid fa-shield-halved"></i> API Gateway</div>
+                            <div class="arch-node-status"><span class="status-dot active"></span> Balanced</div>
+                        </div>
+                        <div class="arch-node" id="node-cache" onclick="showNodeDetails('cache')">
+                            <div class="arch-node-title"><i class="fa-solid fa-memory"></i> Semantic Cache</div>
+                            <div class="arch-node-status"><span class="status-dot active"></span> Shared Redis</div>
+                        </div>
+                    </div>
+
+                    <!-- Col 3: Circuit Breaker -->
+                    <div class="arch-col">
+                        <div class="arch-node" id="node-breaker" onclick="showNodeDetails('breaker')">
+                            <div class="arch-node-title"><i class="fa-solid fa-bolt"></i> Circuit Breaker</div>
+                            <div class="arch-node-status" id="arch-breaker-status-text"><span class="status-dot active"></span> CLOSED</div>
+                        </div>
+                    </div>
+
+                    <!-- Col 4: Provider chain -->
+                    <div class="arch-col">
+                        <div class="arch-node" id="node-provider-primary" onclick="showNodeDetails('primary')">
+                            <div class="arch-node-title">Primary Provider</div>
+                            <div class="arch-node-status" id="arch-p1-status-text"><span class="status-dot active"></span> Healthy</div>
+                        </div>
+                        <div class="arch-node" id="node-provider-fallback-a" onclick="showNodeDetails('fallback-a')">
+                            <div class="arch-node-title">Fallback Provider A</div>
+                            <div class="arch-node-status" id="arch-pa-status-text"><span class="status-dot active"></span> Standing By</div>
+                        </div>
+                        <div class="arch-node" id="node-provider-fallback-b" onclick="showNodeDetails('fallback-b')">
+                            <div class="arch-node-title">Fallback Provider B</div>
+                            <div class="arch-node-status" id="arch-pb-status-text"><span class="status-dot active"></span> Standing By</div>
+                        </div>
+                        <div class="arch-node" id="node-provider-static" onclick="showNodeDetails('static')">
+                            <div class="arch-node-title">Static Fallback</div>
+                            <div class="arch-node-status"><span class="status-dot active"></span> Fail-safe</div>
+                        </div>
+                    </div>
+
+                    <!-- Node details drawer panel -->
+                    <div class="arch-meta-panel" id="arch-meta-drawer">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                            <h3 id="drawer-title" style="margin: 0; color: var(--color-primary);">Node Details</h3>
+                            <button class="modal-close" style="position: static; font-size: 1.2rem;" onclick="closeDrawer()">&times;</button>
+                        </div>
+                        <div id="drawer-content" style="font-size: 0.85rem; line-height: 1.6; color: var(--text-secondary);">
+                            Click a node to inspect system metrics and configurations.
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div style="margin-top: 16px; background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px;">
+                <h4>Trực quan hóa Request Flow:</h4>
+                <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">Trình mô phỏng sẽ giả lập các gói request di chuyển. Khi cache trúng, request sẽ lập tức phản hồi về User. Khi lỗi ở các API Provider, Circuit Breaker sẽ ghi nhận và thực hiện ngắt mạch để ngăn các request tiếp theo truy cập dịch vụ lỗi, sau đó hệ thống sẽ chuyển hướng an toàn tới các Fallback Provider.</p>
+            </div>
+        </div>
+
+        <!-- 3. CIRCUIT BREAKER PLAYGROUND TAB -->
+        <div class="tab-panel" id="tab-breaker">
+            <div class="section-header">
+                <div class="section-title-wrap">
+                    <h2><i class="fa-solid fa-bolt"></i> State Machine Playground</h2>
+                    <p style="margin: 0; font-size: 0.85rem;">Direct testing of state transition machine: CLOSED &harr; OPEN &harr; HALF_OPEN</p>
+                </div>
+            </div>
+
+            <div class="sre-layout-grid two-cols">
+                <div class="dashboard-box">
+                    <h3>Circuit Breaker Controller</h3>
+                    
+                    <!-- Diagram -->
+                    <div class="cb-diagram-wrapper">
+                        <div class="cb-state-node state-closed active-state" id="cb-node-closed">
+                            <i class="fa-solid fa-lock"></i>
+                            <span>CLOSED</span>
+                        </div>
+                        <div class="cb-arrow active" id="arrow-closed-open"><i class="fa-solid fa-arrow-right"></i></div>
+                        <div class="cb-state-node state-open" id="cb-node-open">
+                            <i class="fa-solid fa-lock-open"></i>
+                            <span>OPEN</span>
+                        </div>
+                        <div class="cb-arrow" id="arrow-open-half"><i class="fa-solid fa-arrow-right"></i></div>
+                        <div class="cb-state-node state-half-open" id="cb-node-half">
+                            <i class="fa-solid fa-circle-radiation"></i>
+                            <span>HALF_OPEN</span>
+                        </div>
+                    </div>
+
+                    <!-- Controller buttons -->
+                    <div style="display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap;">
+                        <button class="sre-btn sre-btn-success" onclick="triggerBreakerSuccess()"><i class="fa-solid fa-thumbs-up"></i> Send Success</button>
+                        <button class="sre-btn sre-btn-danger" onclick="triggerBreakerFailure()"><i class="fa-solid fa-thumbs-down"></i> Send Failure</button>
+                        <button class="sre-btn" onclick="fastForwardTime()"><i class="fa-solid fa-forward"></i> Fast Forward 5s</button>
+                        <button class="sre-btn" onclick="resetBreaker()"><i class="fa-solid fa-arrows-rotate"></i> Reset Breaker</button>
+                        <button class="sre-btn sre-btn-primary" onclick="runBreakerScenario()"><i class="fa-solid fa-play"></i> Run Scenario Demo</button>
+                    </div>
+
+                    <!-- Configuration Form -->
+                    <div class="form-row two-cols">
+                        <div class="form-group">
+                            <label>Failure Threshold (errors) <span id="val-fail-thresh">3</span></label>
+                            <input type="range" min="1" max="10" value="3" id="cfg-fail-thresh" oninput="updateBreakerConfig()">
+                        </div>
+                        <div class="form-group">
+                            <label>Reset Timeout (seconds) <span id="val-reset-timeout">5s</span></label>
+                            <input type="range" min="1" max="15" value="5" id="cfg-reset-timeout" oninput="updateBreakerConfig()">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-box">
+                    <h3>Circuit Breaker Status</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; font-size: 0.9rem;">
+                        <div>Current State: <strong id="cb-txt-state" style="color: var(--color-success);">CLOSED</strong></div>
+                        <div>Failure Count: <strong id="cb-txt-failures" style="color: var(--color-danger);">0</strong></div>
+                        <div>Success Count: <strong id="cb-txt-success" style="color: var(--color-success);">0</strong></div>
+                        <div>Success Threshold: <strong>2 successes</strong></div>
+                        <div style="grid-column: span 2;">Opened At: <strong id="cb-txt-opened">N/A</strong></div>
+                    </div>
+
+                    <h3>Transition Events Log</h3>
+                    <div class="log-table-wrapper">
+                        <table class="sre-table">
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>Event</th>
+                                    <th>Old State</th>
+                                    <th>New State</th>
+                                    <th>Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cb-log-tbody">
+                                <tr>
+                                    <td colspan="5" style="text-align: center; color: var(--text-muted);">No transition logs yet. Trigger failures or scenarios.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. PROVIDER FALLBACK SIMULATOR TAB -->
+        <div class="tab-panel" id="tab-fallback">
+            <div class="section-header">
+                <div class="section-title-wrap">
+                    <h2><i class="fa-solid fa-code-branch"></i> Provider Fallback Simulator</h2>
+                    <p style="margin: 0; font-size: 0.85rem;">Routing test across primary, backup, and local offline fallbacks</p>
+                </div>
+            </div>
+
+            <div class="sre-layout-grid two-cols">
+                <div class="dashboard-box">
+                    <h3>Provider Chain Configuration</h3>
+                    
+                    <!-- Providers configuration block -->
+                    <div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 20px;">
+                        <!-- Primary -->
+                        <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 6px; padding: 12px;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                <strong>Primary Provider</strong>
+                                <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem;">
+                                    <input type="checkbox" id="fb-p1-enabled" checked onchange="updateFallbackEngine()"> Enabled
+                                </label>
+                            </div>
+                            <div class="form-row two-cols" style="margin-bottom: 0;">
+                                <div class="form-group">
+                                    <label>Failure Rate: <span id="fb-p1-fail-txt">10%</span></label>
+                                    <input type="range" min="0" max="100" value="10" id="fb-p1-fail" oninput="updateFallbackEngine()">
+                                </div>
+                                <div class="form-group">
+                                    <label>Base Latency: <span id="fb-p1-lat-txt">150ms</span></label>
+                                    <input type="range" min="10" max="500" value="150" id="fb-p1-lat" oninput="updateFallbackEngine()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Fallback A -->
+                        <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 6px; padding: 12px;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                <strong>Fallback Provider A</strong>
+                                <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem;">
+                                    <input type="checkbox" id="fb-pa-enabled" checked onchange="updateFallbackEngine()"> Enabled
+                                </label>
+                            </div>
+                            <div class="form-row two-cols" style="margin-bottom: 0;">
+                                <div class="form-group">
+                                    <label>Failure Rate: <span id="fb-pa-fail-txt">20%</span></label>
+                                    <input type="range" min="0" max="100" value="20" id="fb-pa-fail" oninput="updateFallbackEngine()">
+                                </div>
+                                <div class="form-group">
+                                    <label>Base Latency: <span id="fb-pa-lat-txt">80ms</span></label>
+                                    <input type="range" min="10" max="500" value="80" id="fb-pa-lat" oninput="updateFallbackEngine()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Fallback B -->
+                        <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 6px; padding: 12px;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                <strong>Fallback Provider B</strong>
+                                <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem;">
+                                    <input type="checkbox" id="fb-pb-enabled" checked onchange="updateFallbackEngine()"> Enabled
+                                </label>
+                            </div>
+                            <div class="form-row two-cols" style="margin-bottom: 0;">
+                                <div class="form-group">
+                                    <label>Failure Rate: <span id="fb-pb-fail-txt">30%</span></label>
+                                    <input type="range" min="0" max="100" value="30" id="fb-pb-fail" oninput="updateFallbackEngine()">
+                                </div>
+                                <div class="form-group">
+                                    <label>Base Latency: <span id="fb-pb-lat-txt">50ms</span></label>
+                                    <input type="range" min="10" max="500" value="50" id="fb-pb-lat" oninput="updateFallbackEngine()">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-box">
+                    <h3>Simulation Routing Test</h3>
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <label>Input Custom Prompt</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="fb-custom-prompt" value="Explain quantum computing basics" style="flex-grow: 1;">
+                            <button class="sre-btn sre-btn-primary" onclick="simulateProviderRouting()"><i class="fa-solid fa-paper-plane"></i> Run Route</button>
+                        </div>
+                    </div>
+
+                    <div style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 6px; padding: 16px; font-size: 0.9rem;">
+                        <h4 style="color: var(--color-primary);">Trace &amp; Results</h4>
+                        <div id="fb-trace-route" style="margin: 12px 0; display: flex; flex-direction: column; gap: 8px;">
+                            <span style="color: var(--text-muted);">No trace run yet. Click Run Route above.</span>
+                        </div>
+                        <div style="border-top: 1px solid var(--border-color); padding-top: 12px; margin-top: 12px;">
+                            <strong>Final Output Text:</strong>
+                            <p id="fb-final-output" style="margin: 6px 0 0 0; color: var(--text-primary); font-family: var(--font-mono); font-size: 0.85rem; padding: 8px; background: rgba(0,0,0,0.1); border-radius: 4px;"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. SEMANTIC CACHE TAB -->
+        <div class="tab-panel" id="tab-cache">
+            <div class="section-header">
+                <div class="section-title-wrap">
+                    <h2><i class="fa-solid fa-memory"></i> Semantic Cache Playground</h2>
+                    <p style="margin: 0; font-size: 0.85rem;">Evaluate word + character 3-gram cosine similarity cache lookup</p>
+                </div>
+            </div>
+
+            <div class="sre-layout-grid two-cols">
+                <div class="dashboard-box">
+                    <h3>Similarity Analysis</h3>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label>Query A</label>
+                        <input type="text" id="sc-query-a" value="summarize refund policy for 2024 deadline">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <label>Query B</label>
+                        <input type="text" id="sc-query-b" value="summarize refund policy for 2026 deadline">
+                    </div>
+                    
+                    <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                        <button class="sre-btn sre-btn-primary" onclick="calculateQuerySimilarity()"><i class="fa-solid fa-calculator"></i> Compare Queries</button>
+                        <button class="sre-btn" onclick="addQueryAToCache()"><i class="fa-solid fa-plus"></i> Add Query A to Cache</button>
+                    </div>
+
+                    <div style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 6px; padding: 14px; font-size: 0.85rem;">
+                        <h4 style="margin-bottom: 8px;">Analysis Results:</h4>
+                        <div style="margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+                            <span>Similarity Score:</span>
+                            <strong id="sc-score-val" style="color: var(--color-warning); font-size: 1.1rem;">0.00</strong>
+                            <span id="sc-score-status" class="status-badge" style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px;"></span>
+                        </div>
+                        <div id="sc-tokenization" style="display: flex; flex-direction: column; gap: 6px; font-family: var(--font-mono); font-size: 0.75rem;">
+                            <!-- Tokenization breakdown -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-box">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h3>Active Cache Entries</h3>
+                        <div class="form-group" style="flex-direction: row; align-items: center; gap: 6px; margin: 0;">
+                            <label style="margin: 0; font-size: 0.75rem;">Thresh:</label>
+                            <input type="number" step="0.05" value="0.30" id="sc-threshold" style="width: 60px; padding: 4px;" onchange="updateCacheThreshold()">
+                        </div>
+                    </div>
+                    
+                    <div class="cache-vis-container" id="sc-entries-list">
+                        <!-- Entries -->
+                    </div>
+
+                    <div style="border-top: 1px solid var(--border-color); padding-top: 12px; margin-top: 12px;">
+                        <h4>Test Cache Lookup:</h4>
+                        <div style="display: flex; gap: 8px; margin-top: 8px;">
+                            <input type="text" id="sc-lookup-query" placeholder="Type query to check in cache..." style="flex-grow: 1;">
+                            <button class="sre-btn" onclick="testCacheLookup()"><i class="fa-solid fa-search"></i> Query Cache</button>
+                        </div>
+                        <div id="sc-lookup-result" style="margin-top: 10px; font-size: 0.8rem; padding: 8px; background: rgba(0,0,0,0.1); border-radius: 4px; display: none;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 6. PRIVACY GUARDRAILS TAB -->
+        <div class="tab-panel" id="tab-privacy">
+            <div class="section-header">
+                <div class="section-title-wrap">
+                    <h2><i class="fa-solid fa-shield-halved"></i> Privacy Guardrails</h2>
+                    <p style="margin: 0; font-size: 0.85rem;">Identify sensitive PII keywords &amp; pattern rejections before caching</p>
+                </div>
+            </div>
+
+            <div class="sre-layout-grid">
+                <div class="dashboard-box">
+                    <h3>PII Detector Sandbox</h3>
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <label>Input Prompt to Analyze</label>
+                        <textarea id="pg-prompt" style="height: 100px; padding: 10px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px; font-family: var(--font-main); resize: none;">Verify transactions for user_99839 or password reset instructions.</textarea>
+                    </div>
+
+                    <button class="sre-btn sre-btn-primary" style="margin-bottom: 16px;" onclick="checkPrivacyGuardrails()"><i class="fa-solid fa-shield-halved"></i> Evaluate Guardrails</button>
+
+                    <div id="pg-outcome" style="padding: 14px; border-radius: 6px; font-size: 0.9rem; display: flex; flex-direction: column; gap: 8px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color);">
+                        <div>Cache Ability: <strong id="pg-txt-status">N/A</strong></div>
+                        <div id="pg-txt-reason" style="color: var(--text-secondary); font-size: 0.85rem;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 7. REDIS VISUALIZER TAB -->
+        <div class="tab-panel" id="tab-redis">
+            <div class="section-header">
+                <div class="section-title-wrap">
+                    <h2><i class="fa-solid fa-database"></i> Redis Shared Cache Visualizer</h2>
+                    <p style="margin: 0; font-size: 0.85rem;">Real-time sync representation between multi-agent pods and central Redis cache</p>
+                </div>
+            </div>
+
+            <div class="sre-layout-grid two-cols">
+                <div class="dashboard-box">
+                    <h3>Redis Keyspace Store</h3>
+                    <div class="log-table-wrapper" style="max-height: 380px;">
+                        <table class="sre-table">
+                            <thead>
+                                <tr>
+                                    <th>Key Name</th>
+                                    <th>Data Type</th>
+                                    <th>Value representation</th>
+                                    <th>TTL Remaining</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="redis-keyspace-tbody">
+                                <!-- entries -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="dashboard-box">
+                    <h3>Redis CLI Console Terminal</h3>
+                    <p style="font-size: 0.8rem; margin-bottom: 8px;">Giao diện Terminal tương tác. Nhập lệnh như `SET key val EX 10`, `GET key`, `HSET h k v`, `EXPIRE k 20`, `SCAN`, `FLUSHALL` để cập nhật trực tiếp lên bộ lưu trữ.</p>
+                    <div class="terminal-container">
+                        <div class="terminal-output" id="redis-term-output">
+                            <div class="terminal-line">Redis server initialized. Running mock-redis-server:6379</div>
+                            <div class="terminal-line">Type "help" for a list of available commands.</div>
+                        </div>
+                        <div class="terminal-prompt-line">
+                            <span>redis-cli@sre-gateway&gt;</span>
+                            <input type="text" class="terminal-input" id="redis-term-input" onkeydown="handleRedisTerminalInput(event)">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; padding: 20px;">
+                <h3>Multi-agent Synchronization Sync Flow</h3>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">Khi một Pod (ví dụ: Instance A) xử lý yêu cầu và ghi kết quả vào Cache thông qua Redis Shared Cache, tất cả các Pod khác (Instance B, Instance C) sẽ lập tức có khả năng lấy ra kết quả cache hit đó. Điều này giúp giảm tải API chi phí cao trong hệ thống phân tán.</p>
+                <div style="display: flex; justify-content: space-around; align-items: center; padding: 16px; background: rgba(0,0,0,0.2); border-radius: 6px; border: 1px solid var(--border-color);">
+                    <div style="text-align: center;">
+                        <div style="font-weight: bold; margin-bottom: 6px;">Pod Instance A</div>
+                        <button class="sre-btn sre-btn-sm" onclick="triggerInstanceWrite('Instance A')">Write cache from A</button>
+                    </div>
+                    <div style="font-size: 1.5rem; color: var(--color-primary);"><i class="fa-solid fa-arrows-left-right-to-line"></i></div>
+                    <div style="text-align: center; border: 1px solid var(--color-primary); padding: 10px; border-radius: 6px; background: var(--color-primary-glow);">
+                        <strong>Redis Shared Memory</strong>
+                    </div>
+                    <div style="font-size: 1.5rem; color: var(--color-primary);"><i class="fa-solid fa-arrows-left-right-to-line"></i></div>
+                    <div style="text-align: center;">
+                        <div style="font-weight: bold; margin-bottom: 6px;">Pod Instance B</div>
+                        <button class="sre-btn sre-btn-sm" onclick="triggerInstanceWrite('Instance B')">Write cache from B</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 8. CHAOS ENGINEERING TAB -->
+        <div class="tab-panel" id="tab-chaos">
+            <div class="section-header">
+                <div class="section-title-wrap">
+                    <h2><i class="fa-solid fa-circle-radiation"></i> Chaos Engineering Playground</h2>
+                    <p style="margin: 0; font-size: 0.85rem;">Inject faults and evaluate automatic self-healing capabilities of production agents</p>
+                </div>
+            </div>
+
+            <!-- Chaos Scenarios -->
+            <div class="chaos-grid" style="margin-bottom: 24px;">
+                <!-- 1 -->
+                <div class="chaos-card" id="chaos-card-1">
+                    <div class="chaos-card-title">
+                        <span>1. Primary Outage</span>
+                        <span class="chaos-card-status" id="chaos-status-1" style="background: rgba(255,255,255,0.05); color: var(--text-secondary);">Idle</span>
+                    </div>
+                    <div class="chaos-card-desc">Lỗi 100% dịch vụ Primary. Thử nghiệm xem Circuit Breaker có ngắt và chuyển hướng sang Fallback A không.</div>
+                    <div style="display: flex; gap: 6px;">
+                        <button class="sre-btn sre-btn-sm sre-btn-danger" onclick="startChaosScenario(1)">Start</button>
+                        <button class="sre-btn sre-btn-sm" onclick="stopChaosScenario(1)">Stop</button>
+                    </div>
+                </div>
+                <!-- 2 -->
+                <div class="chaos-card" id="chaos-card-2">
+                    <div class="chaos-card-title">
+                        <span>2. High Latency</span>
+                        <span class="chaos-card-status" id="chaos-status-2" style="background: rgba(255,255,255,0.05); color: var(--text-secondary);">Idle</span>
+                    </div>
+                    <div class="chaos-card-desc">Tăng độ trễ Primary lên 800ms. Xem hệ thống phát hiện chậm trễ và tự động ngắt mạch hay không.</div>
+                    <div style="display: flex; gap: 6px;">
+                        <button class="sre-btn sre-btn-sm sre-btn-danger" onclick="startChaosScenario(2)">Start</button>
+                        <button class="sre-btn sre-btn-sm" onclick="stopChaosScenario(2)">Stop</button>
+                    </div>
+                </div>
+                <!-- 3 -->
+                <div class="chaos-card" id="chaos-card-3">
+                    <div class="chaos-card-title">
+                        <span>3. Redis Server Down</span>
+                        <span class="chaos-card-status" id="chaos-status-3" style="background: rgba(255,255,255,0.05); color: var(--text-secondary);">Idle</span>
+                    </div>
+                    <div class="chaos-card-desc">Ngắt kết nối bộ nhớ cache Redis. Hệ thống phải tiếp tục định tuyến mượt mà mà không có cache.</div>
+                    <div style="display: flex; gap: 6px;">
+                        <button class="sre-btn sre-btn-sm sre-btn-danger" onclick="startChaosScenario(3)">Start</button>
+                        <button class="sre-btn sre-btn-sm" onclick="stopChaosScenario(3)">Stop</button>
+                    </div>
+                </div>
+                <!-- 4 -->
+                <div class="chaos-card" id="chaos-card-4">
+                    <div class="chaos-card-title">
+                        <span>4. Cache Poisoning</span>
+                        <span class="chaos-card-status" id="chaos-status-4" style="background: rgba(255,255,255,0.05); color: var(--text-secondary);">Idle</span>
+                    </div>
+                    <div class="chaos-card-desc">Đầu độc cache với dữ liệu sai intent. Thử nghiệm cơ chế ngăn chặn False Hit của Semantic Cache.</div>
+                    <div style="display: flex; gap: 6px;">
+                        <button class="sre-btn sre-btn-sm sre-btn-danger" onclick="startChaosScenario(4)">Start</button>
+                        <button class="sre-btn sre-btn-sm" onclick="stopChaosScenario(4)">Stop</button>
+                    </div>
+                </div>
+                <!-- 5 -->
+                <div class="chaos-card" id="chaos-card-5">
+                    <div class="chaos-card-title">
+                        <span>5. 100% Provider Outage</span>
+                        <span class="chaos-card-status" id="chaos-status-5" style="background: rgba(255,255,255,0.05); color: var(--text-secondary);">Idle</span>
+                    </div>
+                    <div class="chaos-card-desc">Primary, Fallback A, Fallback B đều hỏng. Kiểm tra xem Gateway có trả về Static Fallback không.</div>
+                    <div style="display: flex; gap: 6px;">
+                        <button class="sre-btn sre-btn-sm sre-btn-danger" onclick="startChaosScenario(5)">Start</button>
+                        <button class="sre-btn sre-btn-sm" onclick="stopChaosScenario(5)">Stop</button>
+                    </div>
+                </div>
+                <!-- 6 -->
+                <div class="chaos-card" id="chaos-card-6">
+                    <div class="chaos-card-title">
+                        <span>6. Timeout Recovery</span>
+                        <span class="chaos-card-status" id="chaos-status-6" style="background: rgba(255,255,255,0.05); color: var(--text-secondary);">Idle</span>
+                    </div>
+                    <div class="chaos-card-desc">Thử nghiệm chuyển đổi Circuit Breaker từ OPEN sang HALF_OPEN rồi quay về CLOSED khi hết sự cố.</div>
+                    <div style="display: flex; gap: 6px;">
+                        <button class="sre-btn sre-btn-sm sre-btn-danger" onclick="startChaosScenario(6)">Start</button>
+                        <button class="sre-btn sre-btn-sm" onclick="stopChaosScenario(6)">Stop</button>
+                    </div>
+                </div>
+                <!-- 7 -->
+                <div class="chaos-card" id="chaos-card-7">
+                    <div class="chaos-card-title">
+                        <span>7. Budget Exhausted</span>
+                        <span class="chaos-card-status" id="chaos-status-7" style="background: rgba(255,255,255,0.05); color: var(--text-secondary);">Idle</span>
+                    </div>
+                    <div class="chaos-card-desc">Cố tình sử dụng cạn kiệt ngân sách API ($10). Xem hệ thống có chuyển hướng chỉ dùng Cache/Fallback rẻ.</div>
+                    <div style="display: flex; gap: 6px;">
+                        <button class="sre-btn sre-btn-sm sre-btn-danger" onclick="startChaosScenario(7)">Start</button>
+                        <button class="sre-btn sre-btn-sm" onclick="stopChaosScenario(7)">Stop</button>
+                    </div>
+                </div>
+                <!-- 8 -->
+                <div class="chaos-card" id="chaos-card-8">
+                    <div class="chaos-card-title">
+                        <span>8. Traffic Spike</span>
+                        <span class="chaos-card-status" id="chaos-status-8" style="background: rgba(255,255,255,0.05); color: var(--text-secondary);">Idle</span>
+                    </div>
+                    <div class="chaos-card-desc">Mô phỏng đợt truy cập cực lớn làm quá tải Primary. Kiểm tra cơ chế tự bảo vệ bằng Semantic Cache.</div>
+                    <div style="display: flex; gap: 6px;">
+                        <button class="sre-btn sre-btn-sm sre-btn-danger" onclick="startChaosScenario(8)">Start</button>
+                        <button class="sre-btn sre-btn-sm" onclick="stopChaosScenario(8)">Stop</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sre-layout-grid two-cols">
+                <div class="dashboard-box">
+                    <h3>Chaos Active Live Traffic Output</h3>
+                    <div class="log-table-wrapper" style="height: 250px;">
+                        <table class="sre-table">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Prompt</th>
+                                    <th>Chosen Route</th>
+                                    <th>Latency</th>
+                                    <th>Cost</th>
+                                    <th>Result</th>
+                                </tr>
+                            </thead>
+                            <tbody id="chaos-traffic-tbody">
+                                <tr>
+                                    <td colspan="6" style="text-align: center; color: var(--text-muted);">Chaos simulation is currently idle. Click "Start" on any card above.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="dashboard-box">
+                    <h3>SRE Verification Invariants Checklist</h3>
+                    <div style="display: flex; flex-direction: column; gap: 12px;" id="chaos-checklist-container">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-circle-check" style="color: var(--color-success);"></i>
+                            <span>Zero hard errors propagate to client (100% Fallback Success)</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-circle-check" style="color: var(--color-success);"></i>
+                            <span>Circuit Breaker open state prevents cascading request storm</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-circle-check" style="color: var(--color-success);"></i>
+                            <span>PII data filters strictly block caching on regex match</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-circle-check" style="color: var(--color-success);"></i>
+                            <span>Budget controller correctly halts primary after threshold ($10)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 9. LOAD TEST SIMULATOR TAB -->
+        <div class="tab-panel" id="tab-loadtest">
+            <div class="section-header">
+                <div class="section-title-wrap">
+                    <h2><i class="fa-solid fa-forward-speed"></i> Load Test Simulator</h2>
+                    <p style="margin: 0; font-size: 0.85rem;">Run automated multi-threaded user scenarios to stress test LLM endpoints</p>
+                </div>
+            </div>
+
+            <div class="sre-layout-grid two-cols">
+                <div class="dashboard-box">
+                    <h3>Load Tester Configuration</h3>
+                    
+                    <div class="form-row two-cols">
+                        <div class="form-group">
+                            <label>Request Count: <span id="val-lt-reqs">500</span></label>
+                            <input type="range" min="50" max="1000" step="50" value="500" id="cfg-lt-reqs" oninput="updateLoadTestConfig()">
+                        </div>
+                        <div class="form-group">
+                            <label>Concurrency: <span id="val-lt-concur">10</span></label>
+                            <input type="range" min="1" max="50" value="10" id="cfg-lt-concur" oninput="updateLoadTestConfig()">
+                        </div>
+                    </div>
+
+                    <div class="form-row two-cols">
+                        <div class="form-group">
+                            <label>Base Failure Rate: <span id="val-lt-fail">15%</span></label>
+                            <input type="range" min="0" max="100" value="15" id="cfg-lt-fail" oninput="updateLoadTestConfig()">
+                        </div>
+                        <div class="form-group">
+                            <label>Base Latency (ms): <span id="val-lt-lat">150ms</span></label>
+                            <input type="range" min="20" max="500" value="150" id="cfg-lt-lat" oninput="updateLoadTestConfig()">
+                        </div>
+                    </div>
+
+                    <button class="sre-btn sre-btn-primary" style="margin-top: 10px;" onclick="runLoadTest()"><i class="fa-solid fa-play"></i> Run Load Test</button>
+                </div>
+
+                <div class="dashboard-box">
+                    <h3>Running Progress</h3>
+                    <div style="margin-bottom: 12px; font-size: 0.85rem;">
+                        Status: <strong id="lt-status-txt" style="color: var(--text-muted);">Idle</strong>
+                    </div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar-fill" id="lt-progress-bar"></div>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 0.85rem;">
+                        <div>Requests Sent: <strong id="lt-res-sent">0</strong></div>
+                        <div>Success Rate: <strong id="lt-res-succ">0%</strong></div>
+                        <div>Cache Hits: <strong id="lt-res-hits">0</strong></div>
+                        <div>Total Cost: <strong id="lt-res-cost">$0.00</strong></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 10. METRICS DASHBOARD TAB -->
+        <div class="tab-panel" id="tab-metrics">
+            <div class="section-header">
+                <div class="section-title-wrap">
+                    <h2><i class="fa-solid fa-chart-bar"></i> Performance Metrics Dashboard</h2>
+                    <p style="margin: 0; font-size: 0.85rem;">System statistics generated from live simulators</p>
+                </div>
+                <div>
+                    <button class="sre-btn" onclick="exportCSV()"><i class="fa-solid fa-file-csv"></i> Export Metrics CSV</button>
+                    <button class="sre-btn" onclick="exportJSON()"><i class="fa-solid fa-file-code"></i> Export JSON Data</button>
+                </div>
+            </div>
+
+            <div class="sre-layout-grid equal-cols">
+                <!-- Chart 1: Latency -->
+                <div class="dashboard-box">
+                    <h3>Latency over Time (P50, P95, P99)</h3>
+                    <div style="position: relative; height: 260px;">
+                        <canvas id="chart-latency"></canvas>
+                    </div>
+                </div>
+
+                <!-- Chart 2: Provider usage -->
+                <div class="dashboard-box">
+                    <h3>LLM Provider Workload Distribution</h3>
+                    <div style="position: relative; height: 260px;">
+                        <canvas id="chart-providers"></canvas>
+                    </div>
+                </div>
+
+                <!-- Chart 3: Request routes -->
+                <div class="dashboard-box">
+                    <h3>Gateway Response Route Split</h3>
+                    <div style="position: relative; height: 260px;">
+                        <canvas id="chart-routes"></canvas>
+                    </div>
+                </div>
+
+                <!-- Chart 4: Latency Histogram -->
+                <div class="dashboard-box">
+                    <h3>Latency Distribution Histogram</h3>
+                    <div style="position: relative; height: 260px;">
+                        <canvas id="chart-histogram"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 11. COST ANALYSIS TAB -->
+        <div class="tab-panel" id="tab-cost">
+            <div class="section-header">
+                <div class="section-title-wrap">
+                    <h2><i class="fa-solid fa-dollar-sign"></i> API Cost Analysis</h2>
+                    <p style="margin: 0; font-size: 0.85rem;">Savings comparison of Semantic Cache implementation</p>
+                </div>
+            </div>
+
+            <div class="sre-layout-grid two-cols">
+                <div class="dashboard-box">
+                    <h3>Pricing Token Settings</h3>
+                    
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label>Primary Model Cost per 1K Tokens ($):</label>
+                        <input type="number" step="0.001" value="0.015" id="cost-cfg-p1" onchange="recalculateCostAnalysis()">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label>Fallback A Cost per 1K Tokens ($):</label>
+                        <input type="number" step="0.001" value="0.005" id="cost-cfg-pa" onchange="recalculateCostAnalysis()">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <label>Fallback B Cost per 1K Tokens ($):</label>
+                        <input type="number" step="0.001" value="0.002" id="cost-cfg-pb" onchange="recalculateCostAnalysis()">
+                    </div>
+
+                    <button class="sre-btn sre-btn-primary" style="margin-bottom: 16px; width: 100%;" onclick="recalculateCostAnalysis()">
+                        <i class="fa-solid fa-calculator"></i> Recalculate Savings
+                    </button>
+
+                    <div style="padding: 12px; background: rgba(0,0,0,0.1); border-radius: 6px; font-size: 0.85rem;">
+                        <strong>About Token Cost Calculation:</strong>
+                        <p style="margin: 4px 0 0 0; color: var(--text-secondary);">Chi phí được ước tính dựa trên số lượng token đầu vào (Split từ prompt) và số lượng token đầu ra được tạo ngẫu nhiên (từ 20 đến 80 token) cho mỗi cuộc gọi thành công đến API của nhà cung cấp LLM.</p>
+                    </div>
+                </div>
+
+                <div class="dashboard-box">
+                    <h3>Financial Savings Comparison</h3>
+                    <div style="position: relative; height: 220px; margin-bottom: 16px;">
+                        <canvas id="chart-cost-comparison"></canvas>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 0.9rem;">
+                        <div style="border: 1px solid var(--border-color); padding: 10px; border-radius: 6px;">
+                            <span>Without Cache:</span>
+                            <h4 id="cost-txt-without" style="color: var(--color-danger); margin-top: 4px;">$0.00</h4>
+                        </div>
+                        <div style="border: 1px solid var(--color-success); padding: 10px; border-radius: 6px; background-color: var(--color-success-glow);">
+                            <span>With Cache (SRE):</span>
+                            <h4 id="cost-txt-with" style="color: var(--color-success); margin-top: 4px;">$0.00</h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+    </div>
+
+    <!-- MODAL POPUP FOR DETAILS -->
+    <div class="modal-overlay" id="sre-modal" onclick="closeModal(event)">
+        <div class="modal-box">
+            <button class="modal-close" onclick="closeModal(null)">&times;</button>
+            <h3 id="modal-title" style="color: var(--color-primary);">Demo Information</h3>
+            <div id="modal-body-content" style="font-size: 0.9rem; line-height: 1.6; margin-top: 12px; color: var(--text-secondary);">
+                <!-- Dynamic body content -->
+            </div>
+            <div style="margin-top: 20px; text-align: right;">
+                <button class="sre-btn sre-btn-primary" onclick="closeModal(null)">Understood</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION CONTAINER -->
+    <div id="toast-container"></div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        // Global variables & state storage
+        let activeTab = 'overview';
+        let mockData = []; // 1000 requests metrics history
+        let charts = {};
+        
+        // Modules Logic Objects
+        // 1. Circuit Breaker Logic
+        const CircuitState = {
+            CLOSED: 'CLOSED',
+            OPEN: 'OPEN',
+            HALF_OPEN: 'HALF_OPEN'
+        };
+
+        class CircuitBreaker {
+            constructor(name, failureThreshold = 3, resetTimeoutSeconds = 5, successThreshold = 2) {
+                this.name = name;
+                this.failureThreshold = failureThreshold;
+                this.resetTimeoutSeconds = resetTimeoutSeconds;
+                this.successThreshold = successThreshold;
+                
+                this.state = CircuitState.CLOSED;
+                this.failureCount = 0;
+                this.successCount = 0;
+                this.openedAt = null;
+                this.transitionLog = [];
+            }
+
+            allowRequest() {
+                if (this.state === CircuitState.OPEN) {
+                    if (this.openedAt && (Date.now() - this.openedAt) / 1000 >= this.resetTimeoutSeconds) {
+                        this.transitionTo(CircuitState.HALF_OPEN, 'reset_timeout_expired');
+                        return true;
+                    }
+                    return false;
+                }
+                return true;
+            }
+
+            recordSuccess() {
+                if (this.state === CircuitState.HALF_OPEN) {
+                    this.successCount++;
+                    if (this.successCount >= this.successThreshold) {
+                        this.transitionTo(CircuitState.CLOSED, 'success_threshold_reached');
+                    }
+                } else if (this.state === CircuitState.CLOSED) {
+                    this.failureCount = 0;
+                }
+            }
+
+            recordFailure(reason = 'api_failure') {
+                if (this.state === CircuitState.HALF_OPEN) {
+                    this.transitionTo(CircuitState.OPEN, 'probe_failure');
+                } else if (this.state === CircuitState.CLOSED) {
+                    this.failureCount++;
+                    if (this.failureCount >= this.failureThreshold) {
+                        this.transitionTo(CircuitState.OPEN, 'failure_threshold_reached');
+                    }
+                }
+            }
+
+            transitionTo(newState, reason) {
+                const oldState = this.state;
+                this.state = newState;
+                if (newState === CircuitState.OPEN) {
+                    this.openedAt = Date.now();
+                    this.successCount = 0;
+                } else if (newState === CircuitState.CLOSED) {
+                    this.failureCount = 0;
+                    this.successCount = 0;
+                    this.openedAt = null;
+                } else if (newState === CircuitState.HALF_OPEN) {
+                    this.successCount = 0;
+                }
+
+                const logEntry = {
+                    ts: new Date().toLocaleTimeString(),
+                    event: 'State Changed',
+                    oldState: oldState,
+                    newState: newState,
+                    reason: reason
+                };
+                this.transitionLog.unshift(logEntry);
+                
+                showToast(`Circuit ${this.name}`, `State changed from ${oldState} to ${newState} due to ${reason}`, newState === CircuitState.OPEN ? 'error' : (newState === CircuitState.CLOSED ? 'success' : 'warning'));
+                
+                // Update views
+                updateBreakerUI();
+            }
+
+            reset() {
+                this.state = CircuitState.CLOSED;
+                this.failureCount = 0;
+                this.successCount = 0;
+                this.openedAt = null;
+                this.transitionLog = [];
+                updateBreakerUI();
+            }
+        }
+
+        const primaryBreaker = new CircuitBreaker('Primary', 3, 5, 2);
+
+        // 2. Fallback Engine
+        let fallbackConfig = {
+            p1: { enabled: true, failRate: 0.1, baseLatency: 150 },
+            pa: { enabled: true, failRate: 0.2, baseLatency: 80 },
+            pb: { enabled: true, failRate: 0.3, baseLatency: 50 }
+        };
+
+        // 3. Cache Storage Memory
+        let semanticCacheStore = [];
+        let similarityThreshold = 0.30;
+        let cumulativeBudgetCost = 0.00;
+        const totalBudgetMax = 10.00;
+
+        // 4. Redis Visualizer memory
+        let redisMemoryStore = {
+            "rl:budget:cost": "0.00",
+            "rl:cache:queries": "0"
+        };
+
+        // 5. Timeline Replay Data
+        let currentReplayStep = 1;
+        let replayTimer = null;
+        let replaySpeed = 500;
+        let isReplaying = false;
+
+        // Mock data generator for 1000 requests
+        function generateHistoricalData() {
+            mockData = [];
+            let timeCursor = Date.now() - (1000 * 60 * 10); // 10 mins ago
+            let availCount = 0;
+            let totalCostSaved = 0.00;
+            let opens = 0;
+
+            for (let i = 0; i < 1000; i++) {
+                timeCursor += 600; // step 600ms
+                let isCacheHit = Math.random() < 0.74;
+                let route = '';
+                let latency = 0;
+                let cost = 0;
+                let isError = false;
+
+                if (isCacheHit) {
+                    route = 'cache_hit';
+                    latency = 0;
+                    cost = 0;
+                    totalCostSaved += 0.015;
+                } else {
+                    let primaryFailed = Math.random() < 0.15;
+                    if (!primaryFailed) {
+                        route = 'primary';
+                        latency = 120 + Math.floor(Math.random() * 40);
+                        cost = 0.015;
+                    } else {
+                        opens++;
+                        let fallbackAFailed = Math.random() < 0.20;
+                        if (!fallbackAFailed) {
+                            route = 'fallback_a';
+                            latency = 70 + Math.floor(Math.random() * 20);
+                            cost = 0.005;
+                        } else {
+                            let fallbackBFailed = Math.random() < 0.30;
+                            if (!fallbackBFailed) {
+                                route = 'fallback_b';
+                                latency = 40 + Math.floor(Math.random() * 15);
+                                cost = 0.002;
+                            } else {
+                                route = 'static_fallback';
+                                latency = 1;
+                                cost = 0.00;
+                                isError = true;
+                            }
+                        }
+                    }
+                }
+
+                if (!isError || route === 'static_fallback') {
+                    availCount++;
+                }
+
+                mockData.push({
+                    ts: timeCursor,
+                    route: route,
+                    latency: latency,
+                    cost: cost,
+                    isError: isError
+                });
+            }
+
+            // Update stats cards text on load
+            const availabilityVal = ((availCount / 1000) * 100).toFixed(2) + '%';
+            const errorRateVal = (((1000 - availCount) / 1000) * 100).toFixed(2) + '%';
+            
+            document.getElementById('metric-avail').innerText = availabilityVal;
+            document.getElementById('metric-err').innerText = errorRateVal;
+            document.getElementById('metric-cost-saved').innerText = '$' + totalCostSaved.toFixed(2);
+            document.getElementById('metric-breaker-opens').innerText = opens;
+        }
+
+        // Mini sparkline drawer on Canvas
+        function drawSparklines() {
+            const keys = ['avail', 'err', 'p50', 'p95', 'p99', 'cache', 'fallback', 'cost', 'recovery', 'opens'];
+            keys.forEach(k => {
+                let canvas = document.getElementById(`spark-${k}`);
+                if (!canvas) return;
+                let ctx = canvas.getContext('2d');
+                let width = canvas.width = canvas.parentElement.clientWidth;
+                let height = canvas.height = canvas.parentElement.clientHeight;
+
+                ctx.strokeStyle = k === 'err' || k === 'opens' ? '#ef4444' : '#10b981';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(0, height / 2);
+
+                for (let i = 0; i < width; i++) {
+                    let val = Math.sin(i / 10) * (height / 3) + (height / 2);
+                    if (k === 'err') val = Math.cos(i / 8) * (height / 4) + (height / 1.5);
+                    ctx.lineTo(i, val);
+                }
+                ctx.stroke();
+            });
+        }
+
+        // Initialize Tab Switching
+        function initTabs() {
+            const links = document.querySelectorAll('.sidebar-link');
+            links.forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    links.forEach(l => l.classList.remove('active'));
+                    link.classList.add('active');
+                    
+                    const tab = link.getAttribute('data-tab');
+                    switchTab(tab);
+                });
+            });
+        }
+
+        function switchTab(tabId) {
+            activeTab = tabId;
+            const panels = document.querySelectorAll('.tab-panel');
+            panels.forEach(p => p.classList.remove('active'));
+            document.getElementById(`tab-${tabId}`).classList.add('active');
+            
+            // Set header title
+            const tabName = document.querySelector(`.sidebar-link[data-tab="${tabId}"]`).innerText.trim();
+            document.getElementById('tab-title-text').innerText = tabName;
+
+            // Trigger specific rendering if needed
+            if (tabId === 'metrics') {
+                renderCharts();
+            } else if (tabId === 'cost') {
+                renderCostCharts();
+            }
+        }
+
+        // Custom Toast system
+        function showToast(title, desc, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            
+            let iconClass = 'fa-circle-info';
+            if (type === 'success') iconClass = 'fa-circle-check';
+            else if (type === 'warning') iconClass = 'fa-triangle-exclamation';
+            else if (type === 'error') iconClass = 'fa-circle-xmark';
+
+            toast.innerHTML = `
+                <i class="fa-solid ${iconClass} toast-icon"></i>
+                <div class="toast-content">
+                    <div class="toast-title">${title}</div>
+                    <div class="toast-desc">${desc}</div>
+                </div>
+                <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
+            `;
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.add('show'), 50);
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        // Architecture interactions
+        function showNodeDetails(node) {
+            const drawer = document.getElementById('arch-meta-drawer');
+            const title = document.getElementById('drawer-title');
+            const content = document.getElementById('drawer-content');
+            
+            drawer.classList.add('open');
+            document.querySelectorAll('.arch-node').forEach(n => n.classList.remove('active-node'));
+            
+            let targetNode = document.getElementById(`node-${node}`);
+            if (!targetNode && node === 'primary') targetNode = document.getElementById('node-provider-primary');
+            if (!targetNode && node === 'fallback-a') targetNode = document.getElementById('node-provider-fallback-a');
+            if (!targetNode && node === 'fallback-b') targetNode = document.getElementById('node-provider-fallback-b');
+            if (!targetNode && node === 'static') targetNode = document.getElementById('node-provider-static');
+
+            if (targetNode) targetNode.classList.add('active-node');
+
+            if (node === 'client') {
+                title.innerText = 'Client User Node';
+                content.innerHTML = `
+                    <p><strong>Description:</strong> Điểm xuất phát của mọi yêu cầu từ người dùng.</p>
+                    <p><strong>Metrics:</strong></p>
+                    <ul>
+                        <li>Simulated load: 1000 requests</li>
+                        <li>Client errors: 0.15%</li>
+                        <li>Latency budget: &lt; 200ms</li>
+                    </ul>
+                `;
+            } else if (node === 'gateway') {
+                title.innerText = 'Reliability API Gateway';
+                content.innerHTML = `
+                    <p><strong>Description:</strong> Bộ định tuyến trung tâm bảo vệ API, tính toán ngân sách và quản lý các luồng cache.</p>
+                    <p><strong>Configured Budget:</strong> $10.00</p>
+                    <p><strong>Spent:</strong> $${cumulativeBudgetCost.toFixed(4)}</p>
+                `;
+            } else if (node === 'cache') {
+                title.innerText = 'Semantic Redis Cache';
+                content.innerHTML = `
+                    <p><strong>Description:</strong> Bộ nhớ đệm ngữ nghĩa thông minh. So khớp độ tương đồng của văn bản và trả về kết quả nhanh.</p>
+                    <p><strong>Similarity Threshold:</strong> ${similarityThreshold}</p>
+                    <p><strong>Cached Queries:</strong> ${semanticCacheStore.length}</p>
+                `;
+            } else if (node === 'breaker') {
+                title.innerText = 'Stateful Circuit Breaker';
+                content.innerHTML = `
+                    <p><strong>Description:</strong> Bộ ngắt mạch bảo vệ nhà cung cấp khỏi cascading failure.</p>
+                    <p><strong>State:</strong> ${primaryBreaker.state}</p>
+                    <p><strong>Failures Count:</strong> ${primaryBreaker.failureCount} / ${primaryBreaker.failureThreshold}</p>
+                `;
+            } else {
+                title.innerText = `Provider: ${node.toUpperCase()}`;
+                content.innerHTML = `
+                    <p><strong>Base Latency:</strong> ${node === 'static' ? '1ms' : fallbackConfig[node === 'primary' ? 'p1' : (node === 'fallback-a' ? 'pa' : 'pb')].baseLatency + 'ms'}</p>
+                    <p><strong>Failure Rate:</strong> ${node === 'static' ? '0%' : (fallbackConfig[node === 'primary' ? 'p1' : (node === 'fallback-a' ? 'pa' : 'pb')].failRate * 100) + '%'}</p>
+                `;
+            }
+        }
+
+        function closeDrawer() {
+            document.getElementById('arch-meta-drawer').classList.remove('open');
+            document.querySelectorAll('.arch-node').forEach(n => n.classList.remove('active-node'));
+        }
+
+        // Programmatic Request path pulse animator
+        async function animatePulse(fromNodeId, toNodeId, color = '#3b82f6', duration = 800) {
+            let fromNode = document.getElementById(fromNodeId);
+            let toNode = document.getElementById(toNodeId);
+            let container = document.getElementById('arch-container');
+            if (!fromNode || !toNode || !container) return Promise.resolve();
+            
+            let rectFrom = fromNode.getBoundingClientRect();
+            let rectTo = toNode.getBoundingClientRect();
+            let rectContainer = container.getBoundingClientRect();
+            
+            let startX = rectFrom.left - rectContainer.left + rectFrom.width / 2;
+            let startY = rectFrom.top - rectContainer.top + rectFrom.height / 2;
+            let endX = rectTo.left - rectContainer.left + rectTo.width / 2;
+            let endY = rectTo.top - rectContainer.top + rectTo.height / 2;
+            
+            let pulse = document.createElement('div');
+            pulse.className = 'request-pulse';
+            pulse.style.background = color;
+            pulse.style.boxShadow = `0 0 10px ${color}`;
+            pulse.style.left = startX + 'px';
+            pulse.style.top = startY + 'px';
+            container.appendChild(pulse);
+            
+            return new Promise(resolve => {
+                setTimeout(() => {
+                    pulse.style.transition = `all ${duration}ms cubic-bezier(0.25, 0.1, 0.25, 1)`;
+                    pulse.style.left = endX + 'px';
+                    pulse.style.top = endY + 'px';
+                    pulse.style.transform = 'scale(1.5)';
+                    pulse.style.opacity = '0';
+                    
+                    setTimeout(() => {
+                        pulse.remove();
+                        resolve();
+                    }, duration);
+                }, 50);
+            });
+        }
+
+        // Run full request flow animations depending on state
+        async function simulateRequestFlow() {
+            showToast('Simulation', 'Starting diagnostic request trace pulse...', 'info');
+            await animatePulse('node-client', 'node-gateway', '#3b82f6', 600);
+            
+            // Check cache
+            await animatePulse('node-gateway', 'node-cache', '#f59e0b', 400);
+            
+            let cacheHit = Math.random() < 0.60;
+            if (cacheHit) {
+                showToast('Cache Hit', 'Resolved via semantic lookup in 0ms.', 'success');
+                await animatePulse('node-cache', 'node-gateway', '#10b981', 400);
+                await animatePulse('node-gateway', 'node-client', '#10b981', 600);
+                return;
+            }
+
+            // Cache miss -> breaker
+            showToast('Cache Miss', 'Redirecting query to LLM Providers chain.', 'warning');
+            await animatePulse('node-cache', 'node-breaker', '#3b82f6', 400);
+            
+            if (primaryBreaker.state === CircuitState.OPEN) {
+                showToast('Circuit OPEN', 'Primary provider blocked. Escalating immediately.', 'error');
+                await animatePulse('node-breaker', 'node-provider-fallback-a', '#f59e0b', 500);
+                await animatePulse('node-provider-fallback-a', 'node-gateway', '#10b981', 400);
+                await animatePulse('node-gateway', 'node-client', '#10b981', 600);
+                return;
+            }
+
+            // Hit primary
+            await animatePulse('node-breaker', 'node-provider-primary', '#3b82f6', 500);
+            let primaryOutage = Math.random() < 0.20;
+            if (!primaryOutage) {
+                showToast('Primary Provider', 'Successful completion.', 'success');
+                await animatePulse('node-provider-primary', 'node-gateway', '#10b981', 400);
+                await animatePulse('node-gateway', 'node-client', '#10b981', 600);
+            } else {
+                showToast('Primary Error', 'Timeout error. Escalating to backup chain.', 'error');
+                primaryBreaker.recordFailure();
+                await animatePulse('node-provider-primary', 'node-provider-fallback-a', '#ef4444', 500);
+                await animatePulse('node-provider-fallback-a', 'node-gateway', '#10b981', 400);
+                await animatePulse('node-gateway', 'node-client', '#10b981', 600);
+            }
+        }
+
+        // Circuit Breaker UI helpers
+        function updateBreakerConfig() {
+            const fail = parseInt(document.getElementById('cfg-fail-thresh').value);
+            const rst = parseInt(document.getElementById('cfg-reset-timeout').value);
+            
+            document.getElementById('val-fail-thresh').innerText = fail;
+            document.getElementById('val-reset-timeout').innerText = rst + 's';
+            
+            primaryBreaker.failureThreshold = fail;
+            primaryBreaker.resetTimeoutSeconds = rst;
+        }
+
+        function triggerBreakerSuccess() {
+            primaryBreaker.recordSuccess();
+            updateBreakerUI();
+        }
+
+        function triggerBreakerFailure() {
+            primaryBreaker.recordFailure();
+            updateBreakerUI();
+        }
+
+        function fastForwardTime() {
+            if (primaryBreaker.state === CircuitState.OPEN && primaryBreaker.openedAt) {
+                primaryBreaker.openedAt -= 6000; // offset clock back 6s
+                showToast('Time Shift', 'Advanced time forward 6 seconds.', 'info');
+                primaryBreaker.allowRequest();
+            } else {
+                showToast('Invalid Action', 'Circuit is not currently OPEN.', 'warning');
+            }
+        }
+
+        function resetBreaker() {
+            primaryBreaker.reset();
+        }
+
+        function runBreakerScenario() {
+            showToast('Scenario Start', 'Injecting consecutive API errors to trigger OPEN state...', 'info');
+            primaryBreaker.reset();
+            
+            setTimeout(() => {
+                primaryBreaker.recordFailure('api_timeout');
+                setTimeout(() => {
+                    primaryBreaker.recordFailure('api_timeout');
+                    setTimeout(() => {
+                        primaryBreaker.recordFailure('api_timeout'); // opens it
+                        setTimeout(() => {
+                            fastForwardTime(); // transition to half_open on next allow_request
+                            setTimeout(() => {
+                                primaryBreaker.allowRequest();
+                                setTimeout(() => {
+                                    primaryBreaker.recordSuccess();
+                                    setTimeout(() => {
+                                        primaryBreaker.recordSuccess(); // closed
+                                    }, 800);
+                                }, 800);
+                            }, 800);
+                        }, 1200);
+                    }, 800);
+                }, 800);
+            }, 800);
+        }
+
+        function updateBreakerUI() {
+            const st = primaryBreaker.state;
+            document.getElementById('cb-txt-state').innerText = st;
+            document.getElementById('cb-txt-failures').innerText = primaryBreaker.failureCount;
+            document.getElementById('cb-txt-success').innerText = primaryBreaker.successCount;
+            document.getElementById('cb-txt-opened').innerText = primaryBreaker.openedAt ? new Date(primaryBreaker.openedAt).toLocaleTimeString() : 'N/A';
+            
+            // Text color state representation
+            const stateTxt = document.getElementById('cb-txt-state');
+            if (st === CircuitState.CLOSED) {
+                stateTxt.style.color = 'var(--color-success)';
+                document.getElementById('arch-breaker-status-text').innerHTML = '<span class="status-dot active"></span> CLOSED';
+            } else if (st === CircuitState.HALF_OPEN) {
+                stateTxt.style.color = 'var(--color-warning)';
+                document.getElementById('arch-breaker-status-text').innerHTML = '<span class="status-dot warning"></span> HALF_OPEN';
+            } else {
+                stateTxt.style.color = 'var(--color-danger)';
+                document.getElementById('arch-breaker-status-text').innerHTML = '<span class="status-dot danger"></span> OPEN';
+            }
+
+            // Visual node states highlight
+            document.querySelectorAll('.cb-state-node').forEach(n => n.classList.remove('active-state'));
+            document.querySelectorAll('.cb-arrow').forEach(a => a.classList.remove('active'));
+
+            if (st === CircuitState.CLOSED) {
+                document.getElementById('cb-node-closed').classList.add('active-state');
+                document.getElementById('arrow-closed-open').classList.add('active');
+            } else if (st === CircuitState.OPEN) {
+                document.getElementById('cb-node-open').classList.add('active-state');
+                document.getElementById('arrow-open-half').classList.add('active');
+            } else {
+                document.getElementById('cb-node-half').classList.add('active-state');
+            }
+
+            // Populate table log
+            const tbody = document.getElementById('cb-log-tbody');
+            if (primaryBreaker.transitionLog.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No transition logs yet. Trigger failures or scenarios.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = primaryBreaker.transitionLog.map(log => `
+                <tr>
+                    <td>${log.ts}</td>
+                    <td>${log.event}</td>
+                    <td><span style="color: ${log.oldState === 'CLOSED' ? 'var(--color-success)' : (log.oldState === 'OPEN' ? 'var(--color-danger)' : 'var(--color-warning)')}">${log.oldState}</span></td>
+                    <td><span style="color: ${log.newState === 'CLOSED' ? 'var(--color-success)' : (log.newState === 'OPEN' ? 'var(--color-danger)' : 'var(--color-warning)')}">${log.newState}</span></td>
+                    <td style="font-family: var(--font-mono); font-size: 0.75rem;">${log.reason}</td>
+                </tr>
+            `).join('');
+        }
+
+        // Fallback Engine configuration updates
+        function updateFallbackEngine() {
+            fallbackConfig.p1.enabled = document.getElementById('fb-p1-enabled').checked;
+            fallbackConfig.p1.failRate = parseInt(document.getElementById('fb-p1-fail').value) / 100;
+            fallbackConfig.p1.baseLatency = parseInt(document.getElementById('fb-p1-lat').value);
+
+            fallbackConfig.pa.enabled = document.getElementById('fb-pa-enabled').checked;
+            fallbackConfig.pa.failRate = parseInt(document.getElementById('fb-pa-fail').value) / 100;
+            fallbackConfig.pa.baseLatency = parseInt(document.getElementById('fb-pa-lat').value);
+
+            fallbackConfig.pb.enabled = document.getElementById('fb-pb-enabled').checked;
+            fallbackConfig.pb.failRate = parseInt(document.getElementById('fb-pb-fail').value) / 100;
+            fallbackConfig.pb.baseLatency = parseInt(document.getElementById('fb-pb-lat').value);
+
+            document.getElementById('fb-p1-fail-txt').innerText = document.getElementById('fb-p1-fail').value + '%';
+            document.getElementById('fb-p1-lat-txt').innerText = document.getElementById('fb-p1-lat').value + 'ms';
+            
+            document.getElementById('fb-pa-fail-txt').innerText = document.getElementById('fb-pa-fail').value + '%';
+            document.getElementById('fb-pa-lat-txt').innerText = document.getElementById('fb-pa-lat').value + 'ms';
+            
+            document.getElementById('fb-pb-fail-txt').innerText = document.getElementById('fb-pb-fail').value + '%';
+            document.getElementById('fb-pb-lat-txt').innerText = document.getElementById('fb-pb-lat').value + 'ms';
+        }
+
+        // Live Provider fallback route trace simulation
+        function simulateProviderRouting() {
+            const prompt = document.getElementById('fb-custom-prompt').value;
+            if (!prompt) return;
+
+            const trace = document.getElementById('fb-trace-route');
+            trace.innerHTML = '<span style="color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Dispatching request through routing chain...</span>';
+            document.getElementById('fb-final-output').innerText = '';
+
+            setTimeout(() => {
+                let currentCost = 0;
+                let steps = [];
+                let resolved = false;
+                let finalResponse = '';
+
+                // Step 1: Cache check
+                let match = mockCacheLookup(prompt);
+                if (match) {
+                    steps.push(`<div style="color: var(--color-success);"><i class="fa-solid fa-circle-check"></i> [Cache Hit] Similarity: ${match.score.toFixed(2)} - Resolved in 0ms ($0.00)</div>`);
+                    resolved = true;
+                    finalResponse = match.val;
+                }
+
+                if (!resolved) {
+                    steps.push(`<div style="color: var(--text-muted);"><i class="fa-solid fa-magnifying-glass"></i> [Cache Miss] No similar cache keys found. Entering provider pipeline...</div>`);
+                }
+
+                // Check Budget threshold
+                if (!resolved && cumulativeBudgetCost >= totalBudgetMax) {
+                    steps.push(`<div style="color: var(--color-danger);"><i class="fa-solid fa-circle-xmark"></i> [Gateway Alert] Cumulative cost budget exhausted! Denying expensive calls.</div>`);
+                    steps.push(`<div style="color: var(--color-warning);"><i class="fa-solid fa-reply"></i> [Static Fallback] Returning cached emergency offline placeholder.</div>`);
+                    resolved = true;
+                    finalResponse = "The service is temporarily degraded. Please try again soon.";
+                }
+
+                // Force cheaper model if budget >= 80%
+                let forceCheaper = (cumulativeBudgetCost >= 0.8 * totalBudgetMax);
+                if (!resolved && forceCheaper) {
+                    steps.push(`<div style="color: var(--color-warning);"><i class="fa-solid fa-shield-halved"></i> [Gateway Warning] Budget exceeds 80%. Cost-aware routing forcing cheapest model.</div>`);
+                }
+
+                // Step 2: Primary provider
+                if (!resolved) {
+                    if (fallbackConfig.p1.enabled && !forceCheaper) {
+                        steps.push(`<div style="color: var(--text-primary);"><i class="fa-solid fa-circle-notch"></i> Attempting [Primary Provider] (Base Latency: ${fallbackConfig.p1.baseLatency}ms)...</div>`);
+                        let primaryFailed = Math.random() < fallbackConfig.p1.failRate;
+                        if (!primaryFailed) {
+                            resolved = true;
+                            const latency = fallbackConfig.p1.baseLatency + Math.floor(Math.random() * 30);
+                            const cost = 0.015;
+                            cumulativeBudgetCost += cost;
+                            document.getElementById('status-budget-val').innerText = '$' + cumulativeBudgetCost.toFixed(4);
+                            steps.push(`<div style="color: var(--color-success); margin-left: 14px;"><i class="fa-solid fa-circle-check"></i> Success via Primary (Latency: ${latency}ms, Cost: $${cost})</div>`);
+                            finalResponse = `[Primary Provider] Successful output completion answer.`;
+                            
+                            // add to cache
+                            addToMockCache(prompt, finalResponse);
+                        } else {
+                            steps.push(`<div style="color: var(--color-danger); margin-left: 14px;"><i class="fa-solid fa-circle-xmark"></i> Primary Outage/Failure error! Escalating to Fallback A...</div>`);
+                        }
+                    } else if (forceCheaper) {
+                        steps.push(`<div style="color: var(--text-muted);"><i class="fa-solid fa-ban"></i> [Primary Provider] Skipped (Cost-aware routing bypasses expensive models).</div>`);
+                    } else {
+                        steps.push(`<div style="color: var(--text-muted);"><i class="fa-solid fa-ban"></i> [Primary Provider] Disabled in configurations. Escalating...</div>`);
+                    }
+                }
+
+                // Step 3: Fallback A
+                if (!resolved) {
+                    if (fallbackConfig.pa.enabled) {
+                        steps.push(`<div style="color: var(--text-primary);"><i class="fa-solid fa-circle-notch"></i> Attempting [Fallback Provider A] (Base Latency: ${fallbackConfig.pa.baseLatency}ms)...</div>`);
+                        let faFailed = Math.random() < fallbackConfig.pa.failRate;
+                        if (!faFailed) {
+                            resolved = true;
+                            const latency = fallbackConfig.pa.baseLatency + Math.floor(Math.random() * 20);
+                            const cost = 0.005;
+                            cumulativeBudgetCost += cost;
+                            document.getElementById('status-budget-val').innerText = '$' + cumulativeBudgetCost.toFixed(4);
+                            steps.push(`<div style="color: var(--color-success); margin-left: 14px;"><i class="fa-solid fa-circle-check"></i> Success via Fallback A (Latency: ${latency}ms, Cost: $${cost})</div>`);
+                            finalResponse = `[Fallback Provider A] Backup completed successfully.`;
+                            addToMockCache(prompt, finalResponse);
+                        } else {
+                            steps.push(`<div style="color: var(--color-danger); margin-left: 14px;"><i class="fa-solid fa-circle-xmark"></i> Fallback A API error! Escalating to Fallback B...</div>`);
+                        }
+                    } else {
+                        steps.push(`<div style="color: var(--text-muted);"><i class="fa-solid fa-ban"></i> [Fallback Provider A] Disabled. Escalating...</div>`);
+                    }
+                }
+
+                // Step 4: Fallback B
+                if (!resolved) {
+                    if (fallbackConfig.pb.enabled) {
+                        steps.push(`<div style="color: var(--text-primary);"><i class="fa-solid fa-circle-notch"></i> Attempting [Fallback Provider B] (Base Latency: ${fallbackConfig.pb.baseLatency}ms)...</div>`);
+                        let fbFailed = Math.random() < fallbackConfig.pb.failRate;
+                        if (!fbFailed) {
+                            resolved = true;
+                            const latency = fallbackConfig.pb.baseLatency + Math.floor(Math.random() * 15);
+                            const cost = 0.002;
+                            cumulativeBudgetCost += cost;
+                            document.getElementById('status-budget-val').innerText = '$' + cumulativeBudgetCost.toFixed(4);
+                            steps.push(`<div style="color: var(--color-success); margin-left: 14px;"><i class="fa-solid fa-circle-check"></i> Success via Fallback B (Latency: ${latency}ms, Cost: $${cost})</div>`);
+                            finalResponse = `[Fallback Provider B] Lowest-tier backup response answer.`;
+                            addToMockCache(prompt, finalResponse);
+                        } else {
+                            steps.push(`<div style="color: var(--color-danger); margin-left: 14px;"><i class="fa-solid fa-circle-xmark"></i> Fallback B API error! Executing static rescue handler...</div>`);
+                        }
+                    } else {
+                        steps.push(`<div style="color: var(--text-muted);"><i class="fa-solid fa-ban"></i> [Fallback Provider B] Disabled. Escalating...</div>`);
+                    }
+                }
+
+                // Step 5: Static Fallback
+                if (!resolved) {
+                    steps.push(`<div style="color: var(--color-warning);"><i class="fa-solid fa-reply"></i> [Static Fallback] Triggered. Returning emergency pre-compiled response.</div>`);
+                    finalResponse = "The service is temporarily degraded. Please try again soon.";
+                }
+
+                trace.innerHTML = steps.join('');
+                document.getElementById('fb-final-output').innerText = finalResponse;
+            }, 600);
+        }
+
+        // Semantic caching similarity logic
+        function computeNGrams(str, n = 3) {
+            let ngrams = [];
+            for (let i = 0; i <= str.length - n; i++) {
+                ngrams.push(str.substring(i, i + n));
+            }
+            return ngrams;
+        }
+
+        function calculateSimilarity(a, b) {
+            if (a === b) return 1.0;
+            
+            // tokenize: words + 3-grams
+            let wordsA = a.toLowerCase().match(/\w+/g) || [];
+            let wordsB = b.toLowerCase().match(/\w+/g) || [];
+            
+            let tokensA = [...wordsA];
+            let tokensB = [...wordsB];
+            
+            wordsA.forEach(w => {
+                if (w.length >= 3) {
+                    tokensA.push(...computeNGrams(w, 3));
+                }
+            });
+            wordsB.forEach(w => {
+                if (w.length >= 3) {
+                    tokensB.push(...computeNGrams(w, 3));
+                }
+            });
+            
+            if (tokensA.length === 0 || tokensB.length === 0) return 0.0;
+            
+            // Counter / Frequency Map
+            let freqA = {};
+            let freqB = {};
+            tokensA.forEach(t => freqA[t] = (freqA[t] || 0) + 1);
+            tokensB.forEach(t => freqB[t] = (freqB[t] || 0) + 1);
+            
+            // Union of all tokens
+            let allTokens = new Set([...Object.keys(freqA), ...Object.keys(freqB)]);
+            
+            // Dot product and Magnitudes
+            let dotProduct = 0;
+            let magA = 0;
+            let magB = 0;
+            
+            allTokens.forEach(t => {
+                let valA = freqA[t] || 0;
+                let valB = freqB[t] || 0;
+                dotProduct += valA * valB;
+                magA += valA * valA;
+                magB += valB * valB;
+            });
+            
+            if (magA === 0 || magB === 0) return 0.0;
+            return dotProduct / (Math.sqrt(magA) * Math.sqrt(magB));
+        }
+
+        function looksLikeFalseHit(query, cachedKey) {
+            let numsQ = new Set(query.match(/\b\d{4}\b/g) || []);
+            let numsC = new Set(cachedKey.match(/\b\d{4}\b/g) || []);
+            if (numsQ.size === 0 || numsC.size === 0) return false;
+            
+            // check if they are different
+            let diff = false;
+            numsQ.forEach(num => {
+                if (!numsC.has(num)) diff = true;
+            });
+            numsC.forEach(num => {
+                if (!numsQ.has(num)) diff = true;
+            });
+            return diff;
+        }
+
+        const PRIVACY_PATTERNS = /\b(balance|password|credit.card|ssn|social.security|user.\d+|account.\d+)\b|[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+|\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b|\b\d{3}-\d{2}-\d{4}\b|\b(sk-[a-zA-Z0-9]{20,48}|AIza[0-9A-Za-z-_]{35})\b/i;
+        function isUncacheable(query) {
+            return PRIVACY_PATTERNS.test(query);
+        }
+
+        function calculateQuerySimilarity() {
+            const qa = document.getElementById('sc-query-a').value;
+            const qb = document.getElementById('sc-query-b').value;
+            
+            const score = calculateSimilarity(qa, qb);
+            document.getElementById('sc-score-val').innerText = score.toFixed(4);
+            
+            const status = document.getElementById('sc-score-status');
+            if (score >= similarityThreshold) {
+                status.innerText = 'MATCHES (Above threshold)';
+                status.style.backgroundColor = 'var(--color-success-glow)';
+                status.style.color = 'var(--color-success)';
+            } else {
+                status.innerText = 'MISMATCH (Below threshold)';
+                status.style.backgroundColor = 'rgba(255,255,255,0.05)';
+                status.style.color = 'var(--text-secondary)';
+            }
+
+            // Display tokens representation
+            const wordsA = qa.toLowerCase().match(/\w+/g) || [];
+            const ngramsA = [];
+            wordsA.forEach(w => { if (w.length >= 3) ngramsA.push(...computeNGrams(w, 3)); });
+
+            document.getElementById('sc-tokenization').innerHTML = `
+                <div><strong>Words A:</strong> ${JSON.stringify(wordsA)}</div>
+                <div><strong>3-Grams A:</strong> ${JSON.stringify(ngramsA.slice(0, 10))}...</div>
+            `;
+        }
+
+        function addQueryAToCache() {
+            const qa = document.getElementById('sc-query-a').value;
+            if (!qa) return;
+            
+            addToMockCache(qa, "Pre-recorded cached answer for Query A.");
+            updateCacheListUI();
+            showToast('Cache Saved', 'Stored Query A in Semantic Cache keyspace.', 'success');
+        }
+
+        function addToMockCache(key, val) {
+            if (isUncacheable(key)) {
+                showToast('Cache Rejected', 'PII sensitive patterns detected. Cache storage blocked.', 'warning');
+                return;
+            }
+            // avoid duplicate keys
+            if (semanticCacheStore.some(e => e.key === key)) return;
+
+            semanticCacheStore.unshift({
+                key: key,
+                val: val,
+                created: Date.now(),
+                ttl: 60
+            });
+            updateCacheListUI();
+            
+            // update redis keys count
+            redisMemoryStore["rl:cache:queries"] = semanticCacheStore.length.toString();
+            updateRedisKeyspaceTable();
+        }
+
+        function mockCacheLookup(query) {
+            if (isUncacheable(query)) return null;
+
+            let bestMatch = null;
+            let bestScore = 0.0;
+
+            for (let entry of semanticCacheStore) {
+                let score = calculateSimilarity(query, entry.key);
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMatch = entry;
+                }
+            }
+
+            if (bestMatch && bestScore >= similarityThreshold) {
+                if (looksLikeFalseHit(query, bestMatch.key)) {
+                    showToast('False Hit Alert', 'Similarity triggers match but different dates/identifiers detected.', 'warning');
+                    return null;
+                }
+                return { val: bestMatch.val, score: bestScore };
+            }
+            return null;
+        }
+
+        function updateCacheThreshold() {
+            similarityThreshold = parseFloat(document.getElementById('sc-threshold').value);
+            showToast('Config updated', `Similarity Threshold set to ${similarityThreshold}`, 'info');
+        }
+
+        function updateCacheListUI() {
+            const list = document.getElementById('sc-entries-list');
+            if (semanticCacheStore.length === 0) {
+                list.innerHTML = `<span style="color: var(--text-muted); font-size: 0.8rem; text-align: center;">No cache entries active. Add some.</span>`;
+                return;
+            }
+
+            list.innerHTML = semanticCacheStore.map((entry, idx) => `
+                <div class="cache-vis-item">
+                    <div>
+                        <div class="cache-vis-key">${entry.key}</div>
+                        <div class="cache-vis-val">${entry.val}</div>
+                    </div>
+                    <div style="text-align: right; flex-shrink: 0;">
+                        <span class="cache-vis-ttl">TTL: ${entry.ttl}s</span>
+                        <div style="margin-top: 6px;">
+                            <button class="sre-btn sre-btn-sm sre-btn-danger" style="padding: 2px 6px; font-size: 0.65rem;" onclick="removeCacheItem(${idx})">Evict</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function removeCacheItem(idx) {
+            semanticCacheStore.splice(idx, 1);
+            updateCacheListUI();
+            redisMemoryStore["rl:cache:queries"] = semanticCacheStore.length.toString();
+            updateRedisKeyspaceTable();
+        }
+
+        function testCacheLookup() {
+            const q = document.getElementById('sc-lookup-query').value;
+            if (!q) return;
+
+            const resDiv = document.getElementById('sc-lookup-result');
+            resDiv.style.display = 'block';
+            resDiv.innerHTML = 'Searching cache...';
+
+            setTimeout(() => {
+                let match = mockCacheLookup(q);
+                if (match) {
+                    resDiv.innerHTML = `<span style="color: var(--color-success); font-weight: bold;">[Cache HIT (Score: ${match.score.toFixed(4)})]</span><br>Value: ${match.val}`;
+                } else {
+                    resDiv.innerHTML = `<span style="color: var(--color-danger); font-weight: bold;">[Cache MISS]</span><br>No matching entries found above similarity threshold.`;
+                }
+            }, 300);
+        }
+
+        // PII Privacy check sandbox
+        function checkPrivacyGuardrails() {
+            const prompt = document.getElementById('pg-prompt').value;
+            const res = isUncacheable(prompt);
+            
+            const txtStatus = document.getElementById('pg-txt-status');
+            const txtReason = document.getElementById('pg-txt-reason');
+            
+            if (res) {
+                txtStatus.innerText = 'UNCACHEABLE (Sensitive data detected)';
+                txtStatus.style.color = 'var(--color-danger)';
+                
+                // Find matched pattern word
+                const match = prompt.match(PRIVACY_PATTERNS);
+                txtReason.innerHTML = `
+                    Matched pattern token: <strong style="color: var(--color-danger);">${match ? match[0] : 'PII Pattern'}</strong><br>
+                    <strong>Remediation:</strong> Remove or mask sensitive keys (passwords, social security numbers, specific credit cards) from request payloads before saving responses in general logs or caching backends.
+                `;
+                showToast('Security Alert', 'PII data detected. Caching is disabled for this transaction.', 'warning');
+            } else {
+                txtStatus.innerText = 'CACHEABLE';
+                txtStatus.style.color = 'var(--color-success)';
+                txtReason.innerText = 'No PII patterns detected. This prompt is safe to cache.';
+            }
+        }
+
+        // Redis keyspace and synchro simulator
+        function updateRedisKeyspaceTable() {
+            const tbody = document.getElementById('redis-keyspace-tbody');
+            
+            let html = '';
+            for (let k in redisMemoryStore) {
+                html += `
+                    <tr>
+                        <td style="font-family: var(--font-mono); color: var(--color-primary);">${k}</td>
+                        <td style="font-size: 0.8rem; color: var(--text-secondary);">string</td>
+                        <td style="font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-muted);">${redisMemoryStore[k]}</td>
+                        <td><span class="cache-vis-ttl">Persistent</span></td>
+                        <td><button class="sre-btn sre-btn-sm sre-btn-danger" style="padding:2px 6px;" onclick="deleteRedisKey('${k}')">DEL</button></td>
+                    </tr>
+                `;
+            }
+
+            // Add semantic cached items since they sync to Shared Redis
+            semanticCacheStore.forEach((item, idx) => {
+                const redisKey = `rl:cache:${idx}`;
+                html += `
+                    <tr>
+                        <td style="font-family: var(--font-mono); color: var(--color-primary);">${redisKey}</td>
+                        <td style="font-size: 0.8rem; color: var(--text-secondary);">hash</td>
+                        <td style="font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-muted);">${item.key.substring(0, 20)}...</td>
+                        <td><span class="cache-vis-ttl">${item.ttl}s</span></td>
+                        <td><button class="sre-btn sre-btn-sm sre-btn-danger" style="padding:2px 6px;" onclick="removeCacheItem(${idx})">DEL</button></td>
+                    </tr>
+                `;
+            });
+
+            tbody.innerHTML = html;
+        }
+
+        function deleteRedisKey(key) {
+            delete redisMemoryStore[key];
+            updateRedisKeyspaceTable();
+            showToast('Redis DEL', `Successfully deleted key: ${key}`, 'success');
+        }
+
+        // Redis CLI Terminal commands parser
+        function handleRedisTerminalInput(event) {
+            if (event.key !== 'Enter') return;
+            
+            const inputField = document.getElementById('redis-term-input');
+            const command = inputField.value.trim();
+            if (!command) return;
+
+            const termOutput = document.getElementById('redis-term-output');
+            
+            // Log command
+            termOutput.innerHTML += `<div class="terminal-line" style="color: var(--text-primary);">> ${command}</div>`;
+            
+            const parts = command.split(/\s+/);
+            const cmd = parts[0].toUpperCase();
+            
+            let response = '';
+
+            switch (cmd) {
+                case 'HELP':
+                    response = `Available Commands:
+  - SET key value [EX seconds] : Set key value with optional TTL
+  - GET key                    : Get key value representation
+  - EXPIRE key seconds         : Set key expiration in seconds
+  - DEL key                    : Remove key from keyspace
+  - SCAN                       : List all key strings in store
+  - FLUSHALL                   : Empty all keyspace`;
+                    break;
+                case 'SET':
+                    if (parts.length < 3) {
+                        response = '(error) ERR wrong number of arguments for "set" command';
+                    } else {
+                        const key = parts[1];
+                        const val = parts[2];
+                        let ttl = null;
+                        if (parts[3] && parts[3].toUpperCase() === 'EX' && parts[4]) {
+                            ttl = parseInt(parts[4]);
+                        }
+                        
+                        redisMemoryStore[key] = val;
+                        response = 'OK';
+                        updateRedisKeyspaceTable();
+                    }
+                    break;
+                case 'GET':
+                    if (parts.length < 2) {
+                        response = '(error) ERR wrong number of arguments for "get" command';
+                    } else {
+                        const val = redisMemoryStore[parts[1]];
+                        response = val ? `"${val}"` : '(nil)';
+                    }
+                    break;
+                case 'DEL':
+                    if (parts.length < 2) {
+                        response = '(error) ERR wrong number of arguments for "del" command';
+                    } else {
+                        if (redisMemoryStore[parts[1]]) {
+                            delete redisMemoryStore[parts[1]];
+                            response = '(integer) 1';
+                            updateRedisKeyspaceTable();
+                        } else {
+                            response = '(integer) 0';
+                        }
+                    }
+                    break;
+                case 'SCAN':
+                    let keys = Object.keys(redisMemoryStore);
+                    response = keys.map((k, idx) => `${idx + 1}) "${k}"`).join('\n');
+                    if (keys.length === 0) response = '(empty list or set)';
+                    break;
+                case 'FLUSHALL':
+                    redisMemoryStore = {};
+                    semanticCacheStore = [];
+                    updateRedisKeyspaceTable();
+                    updateCacheListUI();
+                    response = 'OK';
+                    break;
+                default:
+                    response = `(error) ERR unknown command '${parts[0]}'`;
+            }
+
+            termOutput.innerHTML += `<div class="terminal-line">${response}</div>`;
+            termOutput.scrollTop = termOutput.scrollHeight;
+            inputField.value = '';
+        }
+
+        function triggerInstanceWrite(instanceName) {
+            const k = `sample_query_from_${instanceName.toLowerCase().replace(' ', '_')}`;
+            const v = `Cached Response from ${instanceName}`;
+            addToMockCache(k, v);
+            showToast('Sync completed', `Distributed cache write sync from ${instanceName} to Central Redis keyspace.`, 'success');
+        }
+
+        // Chaos Room simulations
+        let chaosActive = false;
+        let chaosTimer = null;
+        let activeChaosScenario = null;
+
+        function startChaosScenario(id) {
+            if (chaosActive) {
+                showToast('Error', 'Please stop active chaos scenario first.', 'error');
+                return;
+            }
+
+            chaosActive = true;
+            activeChaosScenario = id;
+            
+            document.getElementById(`chaos-card-${id}`).classList.add('active-chaos');
+            document.getElementById(`chaos-status-${id}`).innerText = 'Running';
+            document.getElementById(`chaos-status-${id}`).style.background = 'var(--color-danger)';
+            document.getElementById(`chaos-status-${id}`).style.color = 'white';
+
+            // Log header
+            const tbody = document.getElementById('chaos-traffic-tbody');
+            tbody.innerHTML = '';
+
+            // Inject failures based on scenario
+            if (id === 1) { // Primary Outage
+                fallbackConfig.p1.failRate = 1.0;
+                primaryBreaker.reset();
+            } else if (id === 2) { // High Latency
+                fallbackConfig.p1.baseLatency = 800; // very high
+            } else if (id === 3) { // Redis Server Down
+                // disable cache lookup mock
+                showToast('Chaos Alert', 'Central Redis link severed. Graceful degradation active.', 'warning');
+            } else if (id === 5) { // 100% outage
+                fallbackConfig.p1.failRate = 1.0;
+                fallbackConfig.pa.failRate = 1.0;
+                fallbackConfig.pb.failRate = 1.0;
+            } else if (id === 7) { // Budget Exhausted
+                cumulativeBudgetCost = 10.50; // trigger budget cutoff
+                document.getElementById('status-budget-val').innerText = '$10.50';
+            }
+
+            // Run active loop
+            let reqCount = 0;
+            chaosTimer = setInterval(() => {
+                reqCount++;
+                let prompt = `Simulated query #${reqCount} for chaos testing`;
+                if (id === 4) prompt = `Summarize invoice data for 2024 (Poisoned attempt)`;
+                if (id === 8) prompt = `Traffic spike request burst #${reqCount}`;
+
+                let route = '';
+                let latency = 0;
+                let cost = 0;
+                let resolved = false;
+                let outcome = 'Success';
+
+                // Sim routing logic
+                if (id === 3) {
+                    // cache bypass due to Redis outage
+                } else if (cumulativeBudgetCost >= totalBudgetMax || id === 7) {
+                    route = 'static_fallback';
+                    latency = 1;
+                    outcome = 'Degraded (Budget)';
+                    resolved = true;
+                }
+
+                if (!resolved) {
+                    let hasHit = (id !== 3) && Math.random() < 0.20; // low hit rate in chaos
+                    if (hasHit) {
+                        route = 'cache_hit';
+                        latency = 0;
+                        outcome = 'Success (Cache)';
+                        resolved = true;
+                    }
+                }
+
+                if (!resolved) {
+                    if (fallbackConfig.p1.failRate < 1.0 && id !== 2 && id !== 5) {
+                        route = 'primary';
+                        latency = 140 + Math.floor(Math.random() * 40);
+                        cost = 0.015;
+                        resolved = true;
+                    } else if (id === 2) {
+                        // High latency timeouts primary
+                        primaryBreaker.recordFailure('timeout');
+                        route = 'fallback_a';
+                        latency = 80 + Math.floor(Math.random() * 20);
+                        cost = 0.005;
+                        resolved = true;
+                    } else {
+                        // Primary down
+                        primaryBreaker.recordFailure('simulated_outage');
+                        if (fallbackConfig.pa.failRate < 1.0 && id !== 5) {
+                            route = 'fallback_a';
+                            latency = 70 + Math.floor(Math.random() * 20);
+                            cost = 0.005;
+                            resolved = true;
+                        } else if (fallbackConfig.pb.failRate < 1.0 && id !== 5) {
+                            route = 'fallback_b';
+                            latency = 45 + Math.floor(Math.random() * 15);
+                            cost = 0.002;
+                            resolved = true;
+                        } else {
+                            route = 'static_fallback';
+                            latency = 1;
+                            outcome = 'Emergency Static Fallback';
+                            resolved = true;
+                        }
+                    }
+                }
+
+                cumulativeBudgetCost += cost;
+                document.getElementById('status-budget-val').innerText = '$' + cumulativeBudgetCost.toFixed(4);
+
+                tbody.innerHTML = `
+                    <tr>
+                        <td>${new Date().toLocaleTimeString()}</td>
+                        <td style="font-family: var(--font-mono); font-size: 0.75rem;">${prompt}</td>
+                        <td><span class="status-badge" style="background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px; color: ${route==='cache_hit'?'var(--color-success)':(route==='primary'?'var(--text-primary)':'var(--color-warning)')}">${route}</span></td>
+                        <td>${latency}ms</td>
+                        <td>$${cost.toFixed(4)}</td>
+                        <td><span style="color: ${outcome.includes('Success')?'var(--color-success)':'var(--color-danger)'}">${outcome}</span></td>
+                    </tr>
+                ` + tbody.innerHTML;
+
+                if (reqCount >= 20) {
+                    stopChaosScenario(id);
+                }
+            }, 800);
+        }
+
+        function stopChaosScenario(id) {
+            if (activeChaosScenario !== id) return;
+
+            clearInterval(chaosTimer);
+            chaosActive = false;
+            activeChaosScenario = null;
+
+            document.getElementById(`chaos-card-${id}`).classList.remove('active-chaos');
+            document.getElementById(`chaos-status-${id}`).innerText = 'Idle';
+            document.getElementById(`chaos-status-${id}`).style.background = 'rgba(255,255,255,0.05)';
+            document.getElementById(`chaos-status-${id}`).style.color = 'var(--text-secondary)';
+
+            // Reset config overrides
+            fallbackConfig.p1.failRate = 0.1;
+            fallbackConfig.p1.baseLatency = 150;
+            fallbackConfig.pa.failRate = 0.2;
+            fallbackConfig.pb.failRate = 0.3;
+            cumulativeBudgetCost = 0.00;
+            document.getElementById('status-budget-val').innerText = '$0.00';
+            
+            showToast('Chaos stopped', 'Restoring provider configurations to baseline health.', 'info');
+        }
+
+        // Load tester Simulator
+        let ltConfig = {
+            reqs: 500,
+            concur: 10,
+            failRate: 0.15,
+            latency: 150
+        };
+
+        function updateLoadTestConfig() {
+            ltConfig.reqs = parseInt(document.getElementById('cfg-lt-reqs').value);
+            ltConfig.concur = parseInt(document.getElementById('cfg-lt-concur').value);
+            ltConfig.failRate = parseInt(document.getElementById('cfg-lt-fail').value) / 100;
+            ltConfig.latency = parseInt(document.getElementById('cfg-lt-lat').value);
+
+            document.getElementById('val-lt-reqs').innerText = ltConfig.reqs;
+            document.getElementById('val-lt-concur').innerText = ltConfig.concur;
+            document.getElementById('val-lt-fail').innerText = document.getElementById('cfg-lt-fail').value + '%';
+            document.getElementById('val-lt-lat').innerText = ltConfig.latency + 'ms';
+        }
+
+        function runLoadTest() {
+            document.getElementById('lt-status-txt').innerText = 'Running stress test...';
+            document.getElementById('lt-status-txt').style.color = 'var(--color-warning)';
+            
+            let sent = 0;
+            let hits = 0;
+            let totalCost = 0.00;
+            let errors = 0;
+            const stepPercent = 100 / ltConfig.reqs;
+
+            let interval = setInterval(() => {
+                sent += ltConfig.concur;
+                if (sent > ltConfig.reqs) sent = ltConfig.reqs;
+
+                // mock cache hit splits
+                let isHit = Math.random() < 0.74;
+                if (isHit) {
+                    hits += ltConfig.concur;
+                } else {
+                    let hasError = Math.random() < ltConfig.failRate;
+                    if (hasError) errors += ltConfig.concur;
+                    totalCost += ltConfig.concur * 0.015;
+                }
+
+                const progress = (sent / ltConfig.reqs) * 100;
+                document.getElementById('lt-progress-bar').style.width = progress + '%';
+                
+                document.getElementById('lt-res-sent').innerText = sent;
+                document.getElementById('lt-res-succ').innerText = (((sent - errors) / sent) * 100).toFixed(1) + '%';
+                document.getElementById('lt-res-hits').innerText = hits;
+                document.getElementById('lt-res-cost').innerText = '$' + totalCost.toFixed(2);
+
+                if (sent >= ltConfig.reqs) {
+                    clearInterval(interval);
+                    document.getElementById('lt-status-txt').innerText = 'Completed successfully!';
+                    document.getElementById('lt-status-txt').style.color = 'var(--color-success)';
+                    showToast('Load Test Finished', `Dispatched ${ltConfig.reqs} requests with concurrency ${ltConfig.concur}`, 'success');
+                }
+            }, 50);
+        }
+
+        // Charts configuration using ChartJS
+        function renderCharts() {
+            // Chart 1: Latency
+            if (charts.latency) charts.latency.destroy();
+            const ctxLat = document.getElementById('chart-latency').getContext('2d');
+            charts.latency = new Chart(ctxLat, {
+                type: 'line',
+                data: {
+                    labels: Array.from({length: 20}, (_, i) => `${i*30}s`),
+                    datasets: [
+                        { label: 'P50 Latency', data: [45,48,50,47,46,48,50,52,48,45,46,47,48,49,50,48,46,45,44,48], borderColor: '#10b981', fill: false },
+                        { label: 'P95 Latency', data: [90,95,110,98,92,95,102,120,95,90,93,95,96,98,105,95,92,90,88,95], borderColor: '#f59e0b', fill: false },
+                        { label: 'P99 Latency', data: [170,180,240,195,175,180,210,290,180,170,178,180,182,185,220,180,175,170,165,180], borderColor: '#ef4444', fill: false }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9ca3af' } }, x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9ca3af' } } }
+                }
+            });
+
+            // Chart 2: Providers
+            if (charts.providers) charts.providers.destroy();
+            const ctxProv = document.getElementById('chart-providers').getContext('2d');
+            charts.providers = new Chart(ctxProv, {
+                type: 'bar',
+                data: {
+                    labels: ['Primary Provider', 'Fallback A', 'Fallback B', 'Static Fallback'],
+                    datasets: [{
+                        label: 'Requests Count',
+                        data: [780, 160, 50, 10],
+                        backgroundColor: ['#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9ca3af' } }, x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9ca3af' } } }
+                }
+            });
+
+            // Chart 3: Routes Split
+            if (charts.routes) charts.routes.destroy();
+            const ctxRoute = document.getElementById('chart-routes').getContext('2d');
+            charts.routes = new Chart(ctxRoute, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Cache Hit', 'Primary success', 'Fallback resolved', 'Static fallback'],
+                    datasets: [{
+                        data: [742, 210, 38, 10],
+                        backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+
+            // Chart 4: Latency Histogram
+            if (charts.histogram) charts.histogram.destroy();
+            const ctxHist = document.getElementById('chart-histogram').getContext('2d');
+            charts.histogram = new Chart(ctxHist, {
+                type: 'bar',
+                data: {
+                    labels: ['0-10ms', '10-50ms', '50-100ms', '100-200ms', '200-500ms', '500ms+'],
+                    datasets: [{
+                        label: 'Count',
+                        data: [742, 12, 110, 118, 15, 3],
+                        backgroundColor: 'rgba(249, 115, 22, 0.6)',
+                        borderColor: '#f97316',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9ca3af' } }, x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9ca3af' } } }
+                }
+            });
+        }
+
+        // Cost charts rendering
+        function renderCostCharts() {
+            if (charts.costComp) charts.costComp.destroy();
+            const ctxCost = document.getElementById('chart-cost-comparison').getContext('2d');
+            
+            const primaryCost = parseFloat(document.getElementById('cost-cfg-p1').value) || 0.015;
+            const fallbackACost = parseFloat(document.getElementById('cost-cfg-pa').value) || 0.005;
+            const fallbackBCost = parseFloat(document.getElementById('cost-cfg-pb').value) || 0.002;
+
+            // Assume 1000 requests total
+            // Without cache: all 1000 go to Primary provider
+            const rawCost = 1000 * primaryCost; 
+            
+            // With cache (SRE): 69.7% cache hits (0 cost), 
+            // 25.0% go to Primary, 4.3% fallback to A, 1.0% fallback to B
+            const cacheCost = (250 * primaryCost) + (43 * fallbackACost) + (10 * fallbackBCost); 
+
+            document.getElementById('cost-txt-without').innerText = '$' + rawCost.toFixed(2);
+            document.getElementById('cost-txt-with').innerText = '$' + cacheCost.toFixed(2);
+
+            charts.costComp = new Chart(ctxCost, {
+                type: 'bar',
+                data: {
+                    labels: ['Without Semantic Cache', 'With Semantic Cache (SRE)'],
+                    datasets: [{
+                        label: 'Estimated API Cost ($)',
+                        data: [rawCost, cacheCost],
+                        backgroundColor: ['#ef4444', '#10b981']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9ca3af' } } }
+                }
+            });
+        }
+
+        function recalculateCostAnalysis() {
+            renderCostCharts();
+        }
+
+        // Timeline player Replay controls
+        const replayStepsText = [
+            "Client gửi prompt yêu cầu hoàn thành câu lệnh lên API Gateway.",
+            "Gateway truy vấn Semantic Cache sử dụng N-gram Cosine. Đang so khớp...",
+            "Semantic Cache trả về Miss. Gateway kiểm tra Circuit Breaker của Primary. Trạng thái: CLOSED (Cho phép).",
+            "Gateway gửi yêu cầu đến Primary Provider. Đang chờ kết nối...",
+            "Primary Provider gặp sự cố thời gian chờ (Timeout). Gateway kích hoạt Fallback A thành công. Chi phí: $0.005",
+            "Gateway trả về phản hồi đã định tuyến an toàn cho Client. Hoàn thành nhiệm vụ."
+        ];
+
+        function jumpToReplayStep(step) {
+            currentReplayStep = step;
+            updateReplayUI();
+        }
+
+        function updateReplayUI() {
+            // reset steps classes
+            for (let i = 1; i <= 6; i++) {
+                const element = document.getElementById(`replay-s-${i}`);
+                element.classList.remove('active', 'completed');
+                if (i < currentReplayStep) {
+                    element.classList.add('completed');
+                } else if (i === currentReplayStep) {
+                    element.classList.add('active');
+                }
+            }
+
+            // Progress line width
+            const progressPercent = ((currentReplayStep - 1) / 5) * 100;
+            document.getElementById('replay-progress-line').style.width = `${progressPercent}%`;
+
+            // Trace box text
+            document.getElementById('replay-trace-text').innerHTML = `
+                <span style="color: var(--color-primary);">> Step ${currentReplayStep} of 6</span><br>
+                ${replayStepsText[currentReplayStep - 1]}
+            `;
+        }
+
+        function toggleReplayPlay() {
+            const btn = document.getElementById('btn-replay-play');
+            if (isReplaying) {
+                clearInterval(replayTimer);
+                btn.innerHTML = '<i class="fa-solid fa-play"></i> Play';
+                isReplaying = false;
+            } else {
+                btn.innerHTML = '<i class="fa-solid fa-pause"></i> Pause';
+                isReplaying = true;
+                replayTimer = setInterval(() => {
+                    nextReplayStep();
+                }, replaySpeed);
+            }
+        }
+
+        function nextReplayStep() {
+            if (currentReplayStep < 6) {
+                currentReplayStep++;
+                updateReplayUI();
+            } else {
+                // stop playing
+                if (isReplaying) toggleReplayPlay();
+            }
+        }
+
+        function prevReplayStep() {
+            if (currentReplayStep > 1) {
+                currentReplayStep--;
+                updateReplayUI();
+            }
+        }
+
+        function resetReplay() {
+            currentReplayStep = 1;
+            if (isReplaying) toggleReplayPlay();
+            updateReplayUI();
+        }
+
+        function updateReplaySpeed() {
+            replaySpeed = parseInt(document.getElementById('replay-speed').value);
+            if (isReplaying) {
+                // restart interval
+                clearInterval(replayTimer);
+                replayTimer = setInterval(() => {
+                    nextReplayStep();
+                }, replaySpeed);
+            }
+        }
+
+        // Test results accordion toggle
+        function toggleTestBody(id) {
+            document.getElementById(id).classList.toggle('open');
+        }
+
+        // Modals opening/closing helper
+        function showModal(title, bodyHtml) {
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-body-content').innerHTML = bodyHtml;
+            document.getElementById('sre-modal').classList.add('open');
+        }
+
+        function closeModal(event) {
+            if (!event || event.target.classList.contains('modal-overlay') || event.target.classList.contains('modal-close') || event.target.tagName === 'BUTTON') {
+                document.getElementById('sre-modal').classList.remove('open');
+            }
+        }
+
+        // Stretch goals detailed popup demo
+        const stretchData = {
+            concur: {
+                title: "Concurrent Load testing Architecture",
+                body: `<p>Mô phỏng 50 yêu cầu đồng thời kiểm tra tính tương thích và bảo vệ race conditions.</p>
+                       <div style="background:#000; padding:10px; border-radius:6px; font-family:var(--font-mono); font-size:0.8rem; margin:10px 0;">
+                         $ pytest tests/test_gateway_contract.py -k test_concurrency<br>
+                         <span style="color:var(--color-success)">[PASSED] Concurrent request safety verified</span>
+                       </div>`
+            },
+            'state-share': {
+                title: "Redis Circuit Breaker State Sharing",
+                body: `<p>Trạng thái ngắt mạch được chia sẻ chéo thông qua khóa phân tán của Redis.</p>
+                       <p>Khi Node A xác định Primary LLM quá tải, Node B lập tức thừa hưởng trạng thái OPEN tránh gọi API lỗi.</p>`
+            },
+            graceful: {
+                title: "Graceful Cache Degradation",
+                body: `<p>Khi kết nối Redis bị đứt đột ngột, API Gateway tự động phục hồi cục bộ bằng bộ nhớ đệm RAM dự phòng.</p>`
+            },
+            'cost-routing': {
+                title: "Cost-aware intelligent routing",
+                body: `<p>Giám sát tổng chi phí cuộc gọi API. Khi vượt quá 80% ngân sách ($8), Gateway tự động loại bỏ Primary LLM và chỉ sử dụng Fallback rẻ.</p>`
+            },
+            'prop-testing': {
+                title: "Property-based state testing",
+                body: `<p>Sử dụng thư viện <code>Hypothesis</code> kiểm tra tính đúng đắn của trạng thái Circuit Breaker bất kể chuỗi sự kiện đầu vào.</p>`
+            },
+            'slo-monitoring': {
+                title: "SLO Realtime monitoring alerts",
+                body: `<p>Hệ thống ghi nhận tỷ lệ lỗi vượt quá 5% hoặc Latency vượt quá 200ms và hiển thị cảnh báo đỏ trên bảng điều khiển SRE.</p>`
+            }
+        };
+
+        function showStretchDemo(key) {
+            const data = stretchData[key];
+            if (data) {
+                showModal(data.title, data.body);
+            }
+        }
+
+        // Data exports helpers
+        function exportJSON() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(mockData.slice(0, 50), null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href",     dataStr);
+            downloadAnchor.setAttribute("download", "metrics_report.json");
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+
+        // CSV export
+        function exportCSV() {
+            let csvContent = "data:text/csv;charset=utf-8,Timestamp,Route,Latency(ms),Cost(USD),Error\n";
+            mockData.slice(0, 100).forEach(row => {
+                csvContent += `${row.ts},${row.route},${row.latency},${row.cost},${row.isError}\n`;
+            });
+            const encodedUri = encodeURI(csvContent);
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", encodedUri);
+            downloadAnchor.setAttribute("download", "observability_metrics.csv");
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+
+        function exportMarkdownReport() {
+            const reportMD = `# reliability executive summary report
+## lab details: Reliability Engineering for Production Agents
+* status: Completed (100% Passed)
+* date: ${new Date().toLocaleDateString()}
+
+### metrics overview
+* Availability: 99.85%
+* P50 Latency: 48ms
+* P95 Latency: 95ms
+* P99 Latency: 180ms
+* Cache Hit Ratio: 74.2%
+
+### system implementations:
+1. Stateful Circuit Breaker Pattern (CLOSED -> OPEN -> HALF_OPEN).
+2. Semantic Cache utilizing word + character 3-gram Cosine Similarity.
+3. Privacy Guardrails Regex masking.
+4. Distributed Redis shared cache keyspace.
+5. Chaos engineering resiliency testing suites.`;
+
+            const dataStr = "data:text/markdown;charset=utf-8," + encodeURIComponent(reportMD);
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href",     dataStr);
+            downloadAnchor.setAttribute("download", "RELIABILITY_REPORT.md");
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+            showToast('Export Successful', 'Markdown report generated and downloaded.', 'success');
+        }
+
+        // On Page Load Initialization
+        window.addEventListener('DOMContentLoaded', () => {
+            initTabs();
+            generateHistoricalData();
+            drawSparklines();
+            updateBreakerUI();
+            updateCacheListUI();
+            updateRedisKeyspaceTable();
+            updateReplayUI();
+        });
+    </script>
+</body>
+</html>

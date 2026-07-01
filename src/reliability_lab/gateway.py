@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from reliability_lab.cache import ResponseCache, SharedRedisCache
 from reliability_lab.circuit_breaker import CircuitBreaker, CircuitOpenError
-from reliability_lab.providers import FakeLLMProvider, ProviderError, ProviderResponse
+from reliability_lab.providers import FakeLLMProvider, ProviderError
 
 
 @dataclass(slots=True)
@@ -26,10 +26,31 @@ class ReliabilityGateway:
         providers: list[FakeLLMProvider],
         breakers: dict[str, CircuitBreaker],
         cache: ResponseCache | SharedRedisCache | None = None,
+        budget: float = 10.0,
     ):
         self.providers = providers
         self.breakers = breakers
         self.cache = cache
+        self.budget = budget
+        self.cumulative_cost: float = 0.0
+
+    def _get_cumulative_cost(self) -> float:
+        if self.cache is not None and isinstance(self.cache, SharedRedisCache):
+            try:
+                val = self.cache._redis.get("rl:budget:cost")
+                return float(val) if val is not None else 0.0
+            except Exception:
+                pass
+        return self.cumulative_cost
+
+    def _add_cost(self, amount: float) -> None:
+        if self.cache is not None and isinstance(self.cache, SharedRedisCache):
+            try:
+                self.cache._redis.incrbyfloat("rl:budget:cost", amount)
+                return
+            except Exception:
+                pass
+        self.cumulative_cost += amount
 
     def complete(self, prompt: str) -> GatewayResponse:
         """Return a reliable response or a static fallback.
@@ -58,4 +79,79 @@ class ReliabilityGateway:
         BONUS TODO: Add cost budget tracking — if cumulative cost exceeds a threshold,
         skip expensive providers and route to cache or cheaper fallback.
         """
-        raise NotImplementedError("TODO: implement complete()")
+        cumulative = self._get_cumulative_cost()
+        
+        # 100% budget reached: cache-only or static fallback
+        if cumulative >= self.budget:
+            if self.cache is not None:
+                cached_text, score = self.cache.get(prompt)
+                if cached_text is not None:
+                    return GatewayResponse(
+                        text=cached_text,
+                        route=f"cache_hit:{score:.2f}",
+                        provider=None,
+                        cache_hit=True,
+                        latency_ms=0.0,
+                        estimated_cost=0.0,
+                        error=None
+                    )
+            return GatewayResponse(
+                text="The service is temporarily degraded. Please try again soon.",
+                route="static_fallback",
+                provider=None,
+                cache_hit=False,
+                latency_ms=0.0,
+                estimated_cost=0.0,
+                error="Cost budget exceeded"
+            )
+
+        # 80% budget reached: route to cheaper model only
+        force_cheaper = (cumulative >= 0.8 * self.budget)
+        active_providers = self.providers
+        if force_cheaper and len(self.providers) > 1:
+            cheaper_provider = min(self.providers, key=lambda p: p.cost_per_1k_tokens)
+            active_providers = [cheaper_provider]
+
+        if self.cache is not None:
+            cached_text, score = self.cache.get(prompt)
+            if cached_text is not None:
+                return GatewayResponse(
+                    text=cached_text,
+                    route=f"cache_hit:{score:.2f}",
+                    provider=None,
+                    cache_hit=True,
+                    latency_ms=0.0,
+                    estimated_cost=0.0,
+                    error=None
+                )
+
+        last_error = None
+        for i, provider in enumerate(active_providers):
+            breaker = self.breakers[provider.name]
+            try:
+                response = breaker.call(provider.complete, prompt)
+                self._add_cost(response.estimated_cost)
+                if self.cache is not None:
+                    self.cache.set(prompt, response.text, {"provider": provider.name})
+                route = "primary" if i == 0 and not force_cheaper else "fallback"
+                return GatewayResponse(
+                    text=response.text,
+                    route=route,
+                    provider=provider.name,
+                    cache_hit=False,
+                    latency_ms=response.latency_ms,
+                    estimated_cost=response.estimated_cost,
+                    error=None
+                )
+            except (ProviderError, CircuitOpenError) as e:
+                last_error = e
+
+        return GatewayResponse(
+            text="The service is temporarily degraded. Please try again soon.",
+            route="static_fallback",
+            provider=None,
+            cache_hit=False,
+            latency_ms=0.0,
+            estimated_cost=0.0,
+            error=str(last_error) if last_error is not None else "No providers configured"
+        )

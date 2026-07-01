@@ -22,6 +22,14 @@ def load_queries(path: str | Path = "data/sample_queries.jsonl") -> list[str]:
 
 
 def build_gateway(config: LabConfig, provider_overrides: dict[str, float] | None = None) -> ReliabilityGateway:
+    import redis as redis_lib
+    redis_client = None
+    if config.cache.enabled and config.cache.backend == "redis":
+        try:
+            redis_client = redis_lib.Redis.from_url(config.cache.redis_url, decode_responses=True)
+        except Exception:
+            pass
+
     providers = []
     for p in config.providers:
         fail_rate = provider_overrides.get(p.name, p.fail_rate) if provider_overrides else p.fail_rate
@@ -32,6 +40,7 @@ def build_gateway(config: LabConfig, provider_overrides: dict[str, float] | None
             failure_threshold=config.circuit_breaker.failure_threshold,
             reset_timeout_seconds=config.circuit_breaker.reset_timeout_seconds,
             success_threshold=config.circuit_breaker.success_threshold,
+            redis_client=redis_client,
         )
         for p in config.providers
     }
@@ -62,7 +71,19 @@ def calculate_recovery_time_ms(gateway: ReliabilityGateway) -> float | None:
     Each transition_log entry is a dict with keys: "from", "to", "reason", "ts"
     where "ts" is time.time() (epoch seconds).
     """
-    raise NotImplementedError("TODO: implement calculate_recovery_time_ms()")
+    recovery_times = []
+    for breaker in gateway.breakers.values():
+        open_ts = None
+        for entry in breaker.transition_log:
+            if entry["to"] == "open":
+                open_ts = float(entry["ts"])
+            elif entry["to"] == "closed" and open_ts is not None:
+                delta_ms = (float(entry["ts"]) - open_ts) * 1000.0
+                recovery_times.append(delta_ms)
+                open_ts = None
+    if not recovery_times:
+        return None
+    return sum(recovery_times) / len(recovery_times)
 
 
 def run_scenario(config: LabConfig, queries: list[str], scenario: ScenarioConfig) -> RunMetrics:
@@ -86,7 +107,58 @@ def run_scenario(config: LabConfig, queries: list[str], scenario: ScenarioConfig
     5. Set recovery_time_ms via calculate_recovery_time_ms(gateway)
     6. Return metrics
     """
-    raise NotImplementedError("TODO: implement run_scenario()")
+    gateway = build_gateway(config, scenario.provider_overrides)
+    metrics = RunMetrics()
+    
+    concurrency = getattr(config.load_test, "concurrency", 1)
+    
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    
+    metrics_lock = threading.Lock()
+    
+    def worker() -> None:
+        query = random.choice(queries)
+        result = gateway.complete(query)
+        
+        with metrics_lock:
+            metrics.total_requests += 1
+            metrics.estimated_cost += result.estimated_cost
+            
+            if result.cache_hit:
+                metrics.cache_hits += 1
+                metrics.estimated_cost_saved += 0.001
+                
+            if result.route == "fallback":
+                metrics.fallback_successes += 1
+                metrics.successful_requests += 1
+            elif result.route == "static_fallback":
+                metrics.static_fallbacks += 1
+                metrics.failed_requests += 1
+            else:
+                metrics.successful_requests += 1
+                
+            if result.latency_ms > 0:
+                metrics.latencies_ms.append(result.latency_ms)
+
+    if concurrency > 1:
+        with ThreadPoolExecutor(max_workers=concurrency) as executor:
+            futures = [executor.submit(worker) for _ in range(config.load_test.requests)]
+            for f in futures:
+                f.result()
+    else:
+        for _ in range(config.load_test.requests):
+            worker()
+            
+    circuit_open_count = 0
+    for breaker in gateway.breakers.values():
+        for entry in breaker.transition_log:
+            if entry["to"] == "open":
+                circuit_open_count += 1
+    metrics.circuit_open_count = circuit_open_count
+    
+    metrics.recovery_time_ms = calculate_recovery_time_ms(gateway)
+    return metrics
 
 
 def run_simulation(config: LabConfig, queries: list[str]) -> RunMetrics:
