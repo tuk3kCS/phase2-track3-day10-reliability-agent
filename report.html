@@ -2044,24 +2044,23 @@
                 </div>
 
                 <div class="dashboard-box">
-                    <h3>SRE Verification Invariants Checklist</h3>
-                    <div style="display: flex; flex-direction: column; gap: 12px;" id="chaos-checklist-container">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <i class="fa-solid fa-circle-check" style="color: var(--color-success);"></i>
-                            <span>Zero hard errors propagate to client (100% Fallback Success)</span>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <i class="fa-solid fa-circle-check" style="color: var(--color-success);"></i>
-                            <span>Circuit Breaker open state prevents cascading request storm</span>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <i class="fa-solid fa-circle-check" style="color: var(--color-success);"></i>
-                            <span>PII data filters strictly block caching on regex match</span>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <i class="fa-solid fa-circle-check" style="color: var(--color-success);"></i>
-                            <span>Budget controller correctly halts primary after threshold ($10)</span>
-                        </div>
+                    <h3>Chaos Scenario Activity Log</h3>
+                    <div class="log-table-wrapper" style="max-height: 380px; overflow-y: auto;">
+                        <table class="sre-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 80px;">Time</th>
+                                    <th style="width: 130px;">Scenario</th>
+                                    <th>Event Description</th>
+                                    <th style="width: 80px;">Severity</th>
+                                </tr>
+                            </thead>
+                            <tbody id="chaos-scenario-log-tbody">
+                                <tr>
+                                    <td colspan="4" style="text-align: center; color: var(--text-muted);">No scenario activity recorded yet. Click "Start" on any card to begin.</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -3320,6 +3319,45 @@
         let chaosTimer = null;
         let activeChaosScenario = null;
 
+        function getScenarioName(id) {
+            const names = {
+                1: 'Primary Outage',
+                2: 'High Latency',
+                3: 'Redis Outage',
+                4: 'Cache Poisoning',
+                5: '100% Outage',
+                6: 'Timeout Recovery',
+                7: 'Budget Exhausted',
+                8: 'Traffic Spike'
+            };
+            return names[id] || 'Unknown';
+        }
+
+        function writeChaosScenarioLog(scenarioName, eventDescription, severity = 'info') {
+            const tbody = document.getElementById('chaos-scenario-log-tbody');
+            if (!tbody) return;
+            
+            if (tbody.innerHTML.includes("No scenario activity recorded yet")) {
+                tbody.innerHTML = '';
+            }
+            
+            let color = 'var(--text-muted)';
+            if (severity === 'success') color = 'var(--color-success)';
+            else if (severity === 'warning') color = 'var(--color-warning)';
+            else if (severity === 'error') color = 'var(--color-danger)';
+            else if (severity === 'info') color = 'var(--color-info)';
+            
+            const newRow = `
+                <tr>
+                    <td style="color: var(--text-muted); font-size: 0.75rem; padding: 6px 12px;">${new Date().toLocaleTimeString()}</td>
+                    <td style="font-weight: bold; font-size: 0.75rem; padding: 6px 12px;">${scenarioName}</td>
+                    <td style="font-size: 0.75rem; padding: 6px 12px; color: var(--text-primary);">${eventDescription}</td>
+                    <td style="padding: 6px 12px;"><span class="status-badge" style="background: rgba(255,255,255,0.05); color: ${color}; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: bold;">${severity.toUpperCase()}</span></td>
+                </tr>
+            `;
+            tbody.innerHTML = newRow + tbody.innerHTML;
+        }
+
         function startChaosScenario(id) {
             if (chaosActive) {
                 showToast('Error', 'Please stop active chaos scenario first.', 'error');
@@ -3338,22 +3376,30 @@
             const tbody = document.getElementById('chaos-traffic-tbody');
             tbody.innerHTML = '';
 
+            const scName = getScenarioName(id);
+            writeChaosScenarioLog(scName, 'Scenario started. Injecting failure configs...', 'warning');
+
             // Inject failures based on scenario
             if (id === 1) { // Primary Outage
                 fallbackConfig.p1.failRate = 1.0;
                 primaryBreaker.reset();
+                writeChaosScenarioLog(scName, 'Primary provider failure rate set to 100%. Primary circuit breaker reset.', 'info');
             } else if (id === 2) { // High Latency
                 fallbackConfig.p1.baseLatency = 800; // very high
+                writeChaosScenarioLog(scName, 'Primary provider latency set to 800ms (High latency simulation).', 'info');
             } else if (id === 3) { // Redis Server Down
                 // disable cache lookup mock
                 showToast('Chaos Alert', 'Central Redis link severed. Graceful degradation active.', 'warning');
+                writeChaosScenarioLog(scName, 'Redis central connection cut. Graceful degradation to in-memory fallback cache.', 'warning');
             } else if (id === 5) { // 100% outage
                 fallbackConfig.p1.failRate = 1.0;
                 fallbackConfig.pa.failRate = 1.0;
                 fallbackConfig.pb.failRate = 1.0;
+                writeChaosScenarioLog(scName, 'All providers offline (100% Outage). Emergency fallback active.', 'error');
             } else if (id === 7) { // Budget Exhausted
                 cumulativeBudgetCost = 10.50; // trigger budget cutoff
                 document.getElementById('status-budget-val').innerText = '$10.50';
+                writeChaosScenarioLog(scName, 'Simulated budget cost set to $10.50. Cost budget exceeded.', 'warning');
             }
 
             // Run active loop
@@ -3439,8 +3485,24 @@
                     </tr>
                 ` + tbody.innerHTML;
 
+                // Log details to real-time log
+                if (route === 'static_fallback') {
+                    if (id === 7 || cumulativeBudgetCost >= totalBudgetMax) {
+                        writeChaosScenarioLog(scName, `Request #${reqCount} failed: Budget exhausted. Service degraded to Static Fallback.`, 'error');
+                    } else {
+                        writeChaosScenarioLog(scName, `Request #${reqCount} failed: All providers down. Served emergency Static Fallback.`, 'error');
+                    }
+                } else if (route === 'cache_hit') {
+                    writeChaosScenarioLog(scName, `Request #${reqCount} succeeded: Cache Hit (0ms, $0.00).`, 'success');
+                } else if (route === 'primary') {
+                    writeChaosScenarioLog(scName, `Request #${reqCount} succeeded: Routed to Primary Provider (${latency}ms, $${cost.toFixed(4)}).`, 'success');
+                } else {
+                    writeChaosScenarioLog(scName, `Request #${reqCount}: Primary failed. Graceful failover to ${route.toUpperCase()} (${latency}ms, $${cost.toFixed(4)}).`, 'warning');
+                }
+
                 if (reqCount >= 20) {
                     stopChaosScenario(id);
+                    writeChaosScenarioLog(scName, `Scenario completed 20 requests successfully.`, 'success');
                 }
             }, 800);
         }
@@ -3466,6 +3528,7 @@
             document.getElementById('status-budget-val').innerText = '$0.00';
             
             showToast('Chaos stopped', 'Restoring provider configurations to baseline health.', 'info');
+            writeChaosScenarioLog(getScenarioName(id), 'Scenario stopped. Baseline health configs restored.', 'info');
         }
 
         // Load tester Simulator

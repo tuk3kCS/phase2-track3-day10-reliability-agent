@@ -1,12 +1,12 @@
 {
   "without_cache": {
-    "latency_p50_ms": 222.42,
-    "latency_p95_ms": 311.03,
-    "estimated_cost": 0.022414
+    "latency_p50_ms": 217.94,
+    "latency_p95_ms": 303.73,
+    "estimated_cost": 0.024534
   },
   "with_cache": {
-    "latency_p50_ms": 288.17,
-    "latency_p95_ms": 315.58,
-    "estimated_cost": 0.002748
+    "latency_p50_ms": 0.0,
+    "latency_p95_ms": 310.41,
+    "estimated_cost": 0.011746
   }
 }

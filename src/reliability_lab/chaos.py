@@ -138,8 +138,7 @@ def run_scenario(config: LabConfig, queries: list[str], scenario: ScenarioConfig
             else:
                 metrics.successful_requests += 1
                 
-            if result.latency_ms > 0:
-                metrics.latencies_ms.append(result.latency_ms)
+            metrics.latencies_ms.append(result.latency_ms)
 
     if concurrency > 1:
         with ThreadPoolExecutor(max_workers=concurrency) as executor:
